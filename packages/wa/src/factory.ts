@@ -12,6 +12,7 @@ export type WaEnv = {
 }
 
 /** Returns null when the selected provider is not configured (caller logs + idles). */
+// process.env is structurally compatible (all fields string|undefined); cast is safe
 export function createGateway(env: WaEnv = process.env as WaEnv): WaGateway | null {
   const provider = env.WA_PROVIDER ?? 'fonnte'
   if (provider === 'fonnte') {

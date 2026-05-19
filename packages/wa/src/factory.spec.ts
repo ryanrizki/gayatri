@@ -17,7 +17,11 @@ describe('createGateway', () => {
     expect(gw).toBeInstanceOf(OpenWaAdapter)
   })
 
-  it('returns null when openwa url/key missing', () => {
+  it('returns null when openwa url missing', () => {
+    expect(createGateway({ WA_PROVIDER: 'openwa', OPENWA_API_KEY: 'k' })).toBeNull()
+  })
+
+  it('returns null when openwa key missing', () => {
     expect(createGateway({ WA_PROVIDER: 'openwa', OPENWA_URL: 'http://x' })).toBeNull()
   })
 
