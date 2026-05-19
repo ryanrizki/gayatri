@@ -6,9 +6,8 @@ export interface RetryDecision {
   nextRunAt: Date
 }
 
-/** prevAttempts = attempts value before this failure. */
-export function computeRetry(prevAttempts: number, now: Date = new Date()): RetryDecision {
-  const attempts = prevAttempts + 1
+/** attempts = the current attempt count (already incremented at claim time). */
+export function computeRetry(attempts: number, now: Date = new Date()): RetryDecision {
   if (attempts >= MAX_ATTEMPTS) {
     return { attempts, status: 'DEAD', nextRunAt: new Date(now.getTime()) }
   }

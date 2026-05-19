@@ -8,9 +8,12 @@ const CLAIM_BATCH = 20
 
 /**
  * Claims due WhatsApp jobs with row-level locking.
- * Lease model (crash-safety): claiming sets nextRunAt = now() + 10 min.
+ * Lease model (crash-safety): claiming sets nextRunAt = now() + 10 min AND
+ * increments attempts atomically (attempts = attempts + 1), so a process crash
+ * mid-send still advances the row toward DEAD without needing a separate update.
  * Eligible rows: QUEUED/FAILED past their backoff (attempts < MAX_ATTEMPTS), OR
- * SENDING rows whose lease expired (a previous tick crashed mid-send).
+ * SENDING rows whose lease expired and attempts < MAX_ATTEMPTS (bounds crashed
+ * rows so they cannot be reclaimed forever).
  * SKIP LOCKED makes concurrent ticks safe (no double-claim).
  *
  * CLAIM_SQL is a fully static string (CLAIM_BATCH and MAX_ATTEMPTS are code
@@ -22,14 +25,14 @@ WITH claimed AS (
   WHERE "nextRunAt" <= now()
     AND (
       (status IN ('QUEUED','FAILED') AND attempts < ${MAX_ATTEMPTS})
-      OR status = 'SENDING'
+      OR (status = 'SENDING' AND attempts < ${MAX_ATTEMPTS})
     )
   ORDER BY "nextRunAt" ASC
   LIMIT ${CLAIM_BATCH}
   FOR UPDATE SKIP LOCKED
 )
 UPDATE "WaLog" w
-SET status = 'SENDING', "nextRunAt" = now() + interval '10 minutes'
+SET status = 'SENDING', attempts = attempts + 1, "nextRunAt" = now() + interval '10 minutes'
 FROM claimed
 WHERE w.id = claimed.id
 RETURNING w.id, w."to" AS "to", w.template, w.payload, w.attempts`
@@ -38,11 +41,13 @@ interface ClaimedRow {
   id: string
   to: string
   template: string
+  // pg driver auto-parses JSON/JSONB columns into JS objects (Prisma $queryRawUnsafe returns parsed payload)
   payload: Record<string, unknown>
   attempts: number
 }
 
-type GatewayFactory = () => WaGateway | null
+// M5: exported so Task 8 NestJS wiring can reference the type
+export type GatewayFactory = () => WaGateway | null
 
 @Injectable()
 export class InternalService {
@@ -66,7 +71,24 @@ export class InternalService {
 
     for (const row of rows) {
       const tpl = await this.db.waTemplate.findUnique({ where: { code: row.template } })
-      if (!tpl || !tpl.active) {
+
+      if (!tpl) {
+        // Template DELETED — permanent failure, must NOT retry
+        await this.db.waLog.update({
+          where: { id: row.id },
+          data: {
+            status: 'DEAD',
+            attempts: row.attempts,
+            nextRunAt: new Date(),
+            error: 'template deleted'
+          }
+        })
+        failed++
+        continue
+      }
+
+      if (!tpl.active) {
+        // Template deactivated by admin — reversible, retry via backoff
         const r = computeRetry(row.attempts)
         await this.db.waLog.update({
           where: { id: row.id },
@@ -74,7 +96,7 @@ export class InternalService {
             status: r.status,
             attempts: r.attempts,
             nextRunAt: r.nextRunAt,
-            error: 'template missing/inactive'
+            error: 'template inactive'
           }
         })
         failed++
@@ -87,7 +109,7 @@ export class InternalService {
       if (res.ok) {
         await this.db.waLog.update({
           where: { id: row.id },
-          data: { status: 'SENT', sentAt: new Date(), providerRef: res.providerRef ?? null }
+          data: { status: 'SENT', sentAt: new Date(), provider: gw.name, providerRef: res.providerRef ?? null }
         })
         sent++
       } else {
@@ -98,6 +120,7 @@ export class InternalService {
             status: r.status,
             attempts: r.attempts,
             nextRunAt: r.nextRunAt,
+            provider: gw.name,
             error: res.error ?? 'unknown'
           }
         })
