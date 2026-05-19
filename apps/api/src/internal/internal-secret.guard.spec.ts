@@ -24,3 +24,14 @@ describe('InternalSecretGuard', () => {
     expect(() => new InternalSecretGuard().canActivate(ctx('Bearer nope'))).toThrow(UnauthorizedException)
   })
 })
+
+describe('InternalSecretGuard (unconfigured)', () => {
+  const OLD = process.env.INTERNAL_SECRET
+  beforeAll(() => { delete process.env.INTERNAL_SECRET })
+  afterAll(() => { if (OLD !== undefined) process.env.INTERNAL_SECRET = OLD })
+
+  it('throws when INTERNAL_SECRET is not set', () => {
+    expect(() => new InternalSecretGuard().canActivate(ctx('Bearer anything')))
+      .toThrow(UnauthorizedException)
+  })
+})
