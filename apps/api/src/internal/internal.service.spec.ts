@@ -114,5 +114,6 @@ describe('CLAIM_SQL (lease + crash-safety)', () => {
     expect(CLAIM_SQL).toMatch(/"nextRunAt"\s*<=\s*now\(\)/)
     expect(CLAIM_SQL).toMatch(/attempts\s*=\s*attempts\s*\+\s*1/)
     expect(CLAIM_SQL).toMatch(/OR\s*\(\s*status\s*=\s*'SENDING'\s*AND\s*attempts\s*</)
+    expect(CLAIM_SQL).toMatch(/RETURNING[\s\S]*w\.attempts/)
   })
 })

@@ -18,6 +18,7 @@ const CLAIM_BATCH = 20
  *
  * CLAIM_SQL is a fully static string (CLAIM_BATCH and MAX_ATTEMPTS are code
  * constants, not user input), so $queryRawUnsafe is safe here.
+ * Known terminal state: a row that crashes on its final (MAX_ATTEMPTS-th) attempt stays status=SENDING with attempts=MAX_ATTEMPTS and is never reclaimed (bounded — no loop, no slot consumption). Operational queries for stuck/dead jobs must check status='DEAD' OR (status='SENDING' AND attempts>=MAX_ATTEMPTS).
  */
 export const CLAIM_SQL = `
 WITH claimed AS (
