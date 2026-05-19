@@ -38,4 +38,20 @@ describe('OpenWaAdapter', () => {
     const res = await new OpenWaAdapter(cfg).send('08123456789', 'hi')
     expect(res).toEqual({ ok: false, error: 'econnrefused' })
   })
+
+  it('returns providerRef from nested data.id when top-level id absent', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ data: { id: 'nested-ref' } }), { status: 200 })
+    )
+    const res = await new OpenWaAdapter(cfg).send('08123456789', 'hi')
+    expect(res).toEqual({ ok: true, providerRef: 'nested-ref' })
+  })
+
+  it('maps non-2xx reason field when error absent', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ reason: 'no session' }), { status: 503 })
+    )
+    const res = await new OpenWaAdapter(cfg).send('08123456789', 'hi')
+    expect(res).toEqual({ ok: false, error: 'no session' })
+  })
 })

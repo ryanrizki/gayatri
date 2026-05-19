@@ -9,6 +9,7 @@
  *           OR JSON body { "data": { "id": "<ref>" } }
  *
  * Failure:  HTTP non-2xx  →  { "error": "..." } | { "reason": "..." }
+ *           - If the non-2xx body is missing/unparseable, error falls back to "http <status>".
  *
  * Defaults:
  *   sendPath    = /api/messages/send   (env-overridable via constructor config)
