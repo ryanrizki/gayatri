@@ -28,6 +28,12 @@ export class WaService {
     return d.toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' })
   }
 
+  /**
+   * Persists a QUEUED WaLog row; the message is rendered + sent later by the
+   * /internal/tick drain (InternalService.drainWaJobs) from template + payload.
+   * Note: if the template body is edited between enqueue and drain, the sent
+   * message reflects the body at SEND time, not enqueue time.
+   */
   async enqueue(opts: {
     to: string
     templateCode: WaTemplateCode | string
