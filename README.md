@@ -28,7 +28,7 @@ Baby spa booking + commerce platform with WhatsApp-native notifications.
 
 Next.js · NestJS · Prisma · PostgreSQL · Midtrans · OpenWA/Fonnte (WaLog queue drained by POST /v1/internal/tick via external cron)
 
-> **Notifications:** WhatsApp is delivered via a durable `WaLog` queue. `WaService.enqueue()` writes a `QUEUED` row; an external cron (cron-job.org) calls `POST /v1/internal/tick` (guarded by `INTERNAL_SECRET`), which runs `scanReminders()` then `drainWaJobs()` — claims rows via Postgres `FOR UPDATE SKIP LOCKED` and sends via OpenWA (default) or Fonnte. No Redis, no worker process.
+> **Notifications:** WhatsApp is delivered via a durable `WaLog` queue. `WaService.enqueue()` writes a `QUEUED` row; an external cron (cron-job.org) calls `POST /v1/internal/tick` (guarded by `INTERNAL_SECRET`), which runs `scanReminders()` then `drainWaJobs()` — claims rows via Postgres `FOR UPDATE SKIP LOCKED` and sends via the gateway selected by `WA_PROVIDER` (code-default `fonnte`; `.env.example` ships `openwa`). No Redis, no worker process.
 
 ## Quick start
 

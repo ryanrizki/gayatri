@@ -17,8 +17,8 @@
 | Auth Admin | NextAuth v5 email+password (bcrypt) | Standard |
 | Auth Customer | None (guest checkout) | Phone+name only |
 | File storage | Supabase Storage / Cloudinary | CDN + transform |
-| WA Gateway (default) | OpenWA (self-host, whatsapp-web.js) | $0, no per-msg cost |
-| WA Gateway (fallback) | Fonnte (REST API) | Cheap, fast onboard |
+| WA Gateway | OpenWA (self-host, whatsapp-web.js) | $0; `.env.example` default (`WA_PROVIDER=openwa`) |
+| WA Gateway (code-default fallback) | Fonnte (REST API) | Cheap, fast onboard; code-default when `WA_PROVIDER` unset |
 | WA Gateway v2 | Meta WA Business API (via Wati/360dialog) | Phase 4 migrate |
 | Hosting FE | Vercel | Next.js native |
 | Hosting BE (API) | Railway / Fly.io | Stateless API; external cron (cron-job.org) calls POST /v1/internal/tick |
@@ -340,17 +340,15 @@ class WaService {
   constructor(private gw: WaGateway, private db: PrismaClient) {}
 
   async enqueue(opts: { to: string; templateCode: string; vars: Record<string,string>; checkoutId?: string }) {
-    const tpl = await this.db.waTemplate.findUnique({ where: { code: opts.templateCode } })
-    const body = render(tpl.body, opts.vars)
-    const log = await this.db.waLog.create({ data: { to: opts.to, template: opts.templateCode, payload: opts.vars, status: 'QUEUED', checkoutId: opts.checkoutId } })
-    await queue.add('wa:send', { logId: log.id, to: opts.to, body })
+    await this.db.waLog.create({ data: { to: opts.to, template: opts.templateCode, payload: opts.vars, status: 'QUEUED', checkoutId: opts.checkoutId } })
+    // drained later by POST /v1/internal/tick (InternalService.drainWaJobs)
   }
 }
 ```
 
 Tick drain (`POST /v1/internal/tick`, called by external cron via cron-job.org):
 1. `scanReminders()` — scan `Checkout` where `status=CONFIRMED|RESCHEDULED` and scheduledAt within next 24h±15min and `reminderH1Sent=false`; enqueue T-CUS-005 WaLog rows, set flag (transaction). Same for H-3jam (T-CUS-006, reminderH3Sent).
-2. `drainWaJobs()` — claim `QUEUED` `WaLog` rows via Postgres `FOR UPDATE SKIP LOCKED` + 10-min lease; call `WaGateway.send()` (OpenWA default, Fonnte fallback); update `WaLog.status` to `SENT` or `FAILED`.
+2. `drainWaJobs()` — claim `QUEUED` `WaLog` rows via Postgres `FOR UPDATE SKIP LOCKED` + 10-min lease; call `WaGateway.send()` (selected by `WA_PROVIDER` — code-default `fonnte`; `.env.example` ships `openwa`) via `createGateway()`; update `WaLog.status` to `SENT` or `FAILED`.
 
 ## 7. Concurrency / Dedupe
 

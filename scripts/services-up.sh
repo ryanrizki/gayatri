@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start Postgres + Redis via docker-compose. Idempotent.
+# Start Postgres via docker-compose. Idempotent.
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./_lib.sh
