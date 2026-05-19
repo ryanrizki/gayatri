@@ -80,12 +80,13 @@ async function main() {
   }
 
   // Banner
+  const bannerImage = 'https://picsum.photos/seed/gayatri-hero/1200/600'
   await prisma.banner.upsert({
     where: { id: 'banner-welcome' },
-    update: {},
+    update: { imageUrl: bannerImage },
     create: {
       id: 'banner-welcome',
-      imageUrl: 'https://placehold.co/1200x500?text=Gayatri+Baby+Spa',
+      imageUrl: bannerImage,
       title: 'Selamat Datang di Gayatri',
       order: 1,
       active: true

@@ -9,8 +9,7 @@ import Link from 'next/link'
 
 export const revalidate = 60
 
-const HERO_IMAGE =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuBrvwSReGIrxIa9WTl06Mq0Tu4khAohiIslIViFLu8e41OirPQ4WvvUA0j0rf2iYTUa8k2-9MSTzFmB22Gxr1a3rbcahxpTS8FXvSLO6ReFrmdvqUzmzNJA999eXmJ5DjWEdh7DjLDXa0ISpxHwFRcJ2gHFgT7_NfPf2LWTEZjsB9RbNse7ZGo7OmXDbJ2gBpHxBFi1W0tvRDVRFqQcSRJ2iQfYZQZCaJ9X2ezA0RbimlgrqA9-GgWIfyCtE4-FV17jrrzsxiTMESk'
+const HERO_IMAGE = 'https://picsum.photos/seed/gayatri-hero/1200/600'
 
 const ABOUT_IMG_1 =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuAbEUJxZ1YW3FmMNIJ3h_LFn2Z1Adb-iKPASMBzeTYCzL_0OZLMBZn5oXA9EMiTqm-vwGZCpY8XSTOgscaBzeQqWL19cSaHNy9jZq11PxwfsTbEJkVEkwZTsNl_4y_P0hDJYJkb-yM0RD8wTr8h2dia2nHM-Qr2M7ySPpk5jXysesU-A0pewXgmyj99JWkfEEyZEnyVKaqJ8vR90uwAbpQNtih61geYP9Ku50LZgAXi5GG5VsijUxguGYOcUxjFxVUHfHkKsw68_AM'
