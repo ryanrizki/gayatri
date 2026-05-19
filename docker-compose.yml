@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gayatri-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gayatri
+      POSTGRES_PASSWORD: gayatri
+      POSTGRES_DB: gayatri
+    ports:
+      - "5434:5432"
+    volumes:
+      - gayatri_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gayatri -d gayatri"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: gayatri-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - gayatri_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  gayatri_db:
+  gayatri_redis:

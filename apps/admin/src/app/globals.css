@@ -1,0 +1,80 @@
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,300..600,0..1,-25..200');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  .material-symbols-outlined {
+    font-family: 'Material Symbols Outlined';
+    font-weight: normal;
+    font-style: normal;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
+    -webkit-font-feature-settings: 'liga';
+    -webkit-font-smoothing: antialiased;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    font-feature-settings: 'liga';
+  }
+}
+
+@layer utilities {
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  .animate-spin {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes fadeOut {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes zoomIn {
+    from {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+  }
+
+  .data-\[state\=open\]\:animate-in[data-state='open'] {
+    animation-duration: 150ms;
+    animation-fill-mode: both;
+  }
+  .data-\[state\=closed\]\:animate-out[data-state='closed'] {
+    animation-duration: 120ms;
+    animation-fill-mode: both;
+  }
+  .data-\[state\=open\]\:fade-in[data-state='open'] {
+    animation-name: fadeIn;
+  }
+  .data-\[state\=closed\]\:fade-out[data-state='closed'] {
+    animation-name: fadeOut;
+  }
+  .data-\[state\=open\]\:zoom-in-95[data-state='open'] {
+    animation-name: zoomIn;
+  }
+}

@@ -1,0 +1,41 @@
+node_modules
+.pnpm-store
+.turbo
+
+# build
+dist
+.next
+build
+out
+
+# env
+.env
+.env.local
+.env.*.local
+
+# MCP config (contains API keys)
+.mcp.json
+
+# Stitch raw HTML drops (working artifacts, not source)
+.stitch/
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# editor
+.vscode
+.idea
+
+# prisma
+*.db
+*.db-journal
+
+# coverage
+coverage
+.nyc_output

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": [".env"],
+  "globalEnv": [
+    "NODE_ENV",
+    "TZ",
+    "DATABASE_URL",
+    "REDIS_URL",
+    "API_PORT",
+    "API_URL",
+    "WEB_PORT",
+    "APP_URL_WEB",
+    "NEXT_PUBLIC_API_URL",
+    "ADMIN_PORT",
+    "APP_URL_ADMIN",
+    "ADMIN_SESSION_SECRET",
+    "JWT_SECRET",
+    "CORS_ORIGINS",
+    "WA_PROVIDER",
+    "FONNTE_TOKEN",
+    "ADMIN_WA_NUMBER",
+    "SUPABASE_URL",
+    "SUPABASE_ANON_KEY",
+    "SUPABASE_SERVICE_KEY",
+    "SUPABASE_BUCKET",
+    "SENTRY_DSN"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "dist/**", "!.next/cache/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "outputs": []
+    },
+    "typecheck": {
+      "outputs": []
+    },
+    "test": {
+      "outputs": []
+    }
+  }
+}

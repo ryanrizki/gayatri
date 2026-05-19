@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Shim so Turbo (and other tools) can find `pnpm` on PATH when only corepack is installed.
+exec corepack pnpm "$@"
