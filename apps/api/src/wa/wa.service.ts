@@ -1,14 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../prisma.service'
-import { WaQueue } from './wa.queue'
-import { renderTemplate, normalizePhone } from '@gayatri/wa'
+import { normalizePhone } from '@gayatri/wa'
 import type { WaTemplateCode } from '@gayatri/types'
 
 @Injectable()
 export class WaService {
   private readonly logger = new Logger(WaService.name)
 
-  constructor(private db: PrismaService, private q: WaQueue) {}
+  constructor(private db: PrismaService) {}
 
   private async settings() {
     const rows = await this.db.setting.findMany()
@@ -45,7 +44,6 @@ export class WaService {
       this.logger.warn(`Template ${opts.templateCode} missing/inactive`)
       return null
     }
-    const body = renderTemplate(tpl.body, opts.vars)
 
     const log = await this.db.waLog.create({
       data: {
@@ -58,7 +56,6 @@ export class WaService {
       }
     })
 
-    await this.q.enqueue(opts.templateCode, { logId: log.id, to: target, body })
     return log.id
   }
 
