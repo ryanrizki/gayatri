@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common'
+import { Inject, Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../prisma.service'
 import { createGateway, renderTemplate } from '@gayatri/wa'
 import type { WaGateway } from '@gayatri/wa'
@@ -49,6 +49,7 @@ interface ClaimedRow {
 
 // M5: exported so Task 8 NestJS wiring can reference the type
 export type GatewayFactory = () => WaGateway | null
+export const GATEWAY_FACTORY = 'GATEWAY_FACTORY'
 
 @Injectable()
 export class InternalService {
@@ -56,7 +57,7 @@ export class InternalService {
 
   constructor(
     private db: PrismaService,
-    private gatewayFactory: GatewayFactory = () => createGateway()
+    @Inject(GATEWAY_FACTORY) private gatewayFactory: GatewayFactory
   ) {}
 
   async drainWaJobs(): Promise<{ claimed: number; sent: number; failed: number }> {
