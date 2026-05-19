@@ -223,6 +223,8 @@ model WaLog {
   template   String
   payload    Json
   status     WaStatus  @default(QUEUED)
+  attempts   Int       @default(0)
+  nextRunAt  DateTime  @default(now())
   error      String?
   provider   String?
   providerRef String?
@@ -231,12 +233,15 @@ model WaLog {
 
   @@index([checkoutId, template])
   @@index([status, createdAt])
+  @@index([status, nextRunAt])
 }
 
 enum WaStatus {
   QUEUED
+  SENDING
   SENT
   FAILED
+  DEAD
 }
 
 // ----------------------- Audit / Settings ------------------
