@@ -20,6 +20,7 @@ type Detail = {
   totalIdr: number
   notes: string | null
   cancelReason: string | null
+  preferredDate: string | null
   scheduledAt: string | null
   doneAt: string | null
   createdAt: string
@@ -147,7 +148,14 @@ export function CheckoutDetail({ id }: { id: string }) {
             <CardHeader>
               <CardTitle>Jadwal</CardTitle>
             </CardHeader>
-            <Field label="Tanggal" value={data.scheduledAt ? formatDate(data.scheduledAt) : 'Belum dijadwalkan'} />
+            <Field
+              label="Tanggal Preferensi"
+              value={data.preferredDate ? formatDate(data.preferredDate) : '—'}
+            />
+            <Field
+              label="Jadwal Dikonfirmasi"
+              value={data.scheduledAt ? formatDate(data.scheduledAt) : 'Belum dijadwalkan'}
+            />
             <Field label="Cabang" value={data.branch?.name ?? '—'} />
             <Field label="Terapis" value={data.therapist?.name ?? '—'} />
           </Card>

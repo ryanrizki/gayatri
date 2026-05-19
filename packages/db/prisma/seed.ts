@@ -119,7 +119,7 @@ async function main() {
     { key: 'business_phone', value: '+62 812-3456-7890' },
     { key: 'business_address', value: 'Jl. Mawar No. 1, Jakarta' },
     { key: 'business_hours', value: '09:00-18:00' },
-    { key: 'admin_wa_number', value: process.env.ADMIN_WA_NUMBER ?? '628123456789' },
+    { key: 'admin_wa_number', value: process.env.ADMIN_WA_NUMBER ?? '6282132091173' },
     { key: 'reminder_h1_enabled', value: 'true' },
     { key: 'reminder_h3_enabled', value: 'true' }
   ]

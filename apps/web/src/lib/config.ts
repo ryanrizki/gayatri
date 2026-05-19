@@ -1,3 +1,3 @@
 export function getWaNumber() {
-  return process.env.NEXT_PUBLIC_WA_NUMBER ?? '628123456789'
+  return process.env.NEXT_PUBLIC_WA_NUMBER ?? '6282132091173'
 }

@@ -1,13 +1,13 @@
 'use client'
 
 import { formatDuration, formatIdr, formatIdrShort } from '@/lib/format'
-import type { ServiceDto } from '@gayatri/types'
+import { phoneRegex, type ServiceDto } from '@gayatri/types'
 import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 
 const TIME_SLOTS = ['09:00 WIB', '10:30 WIB', '13:00 WIB', '15:00 WIB', '16:30 WIB']
 
-const AGE_OPTIONS = ['0 - 6 Bulan', '6 - 12 Bulan', '12 - 24 Bulan', 'Di atas 2 Tahun']
+const MAX_AGE_MONTH = 120
 
 const DAY_LABELS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
 
@@ -61,10 +61,12 @@ export function CheckoutForm({
 
   const router = useRouter()
   const [step, setStep] = useState<Step>(1)
+  const [submitting, setSubmitting] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [parentName, setParentName] = useState('')
   const [phone, setPhone] = useState('')
   const [babyName, setBabyName] = useState('')
-  const [babyAge, setBabyAge] = useState<string>(AGE_OPTIONS[0] as string)
+  const [babyAgeMonth, setBabyAgeMonth] = useState('')
   const [notes, setNotes] = useState('')
   const [selectedServiceId, setSelectedServiceId] = useState<string | undefined>(initialService?.id)
 
@@ -105,10 +107,20 @@ export function CheckoutForm({
       })
     : '—'
 
+  const phoneClean = phone.replace(/[^\d+]/g, '')
+  const phoneValid = phoneRegex.test(phoneClean)
+  const phoneError = phone.trim() !== '' && !phoneValid
+
+  const ageNum = Number(babyAgeMonth)
+  const ageValid =
+    /^\d+$/.test(babyAgeMonth.trim()) && ageNum >= 0 && ageNum <= MAX_AGE_MONTH
+  const ageError = babyAgeMonth.trim() !== '' && !ageValid
+
   const canSubmit =
     parentName.trim() !== '' &&
-    phone.trim() !== '' &&
+    phoneValid &&
     babyName.trim() !== '' &&
+    ageValid &&
     selectedService &&
     selectedDay !== null &&
     selectedSlot !== null
@@ -123,19 +135,90 @@ export function CheckoutForm({
       `• Nama Orang Tua: ${parentName}`,
       `• Nomor WA: ${phone}`,
       `• Nama Bayi: ${babyName}`,
-      `• Usia Bayi: ${babyAge}`,
+      `• Usia Bayi: ${babyAgeMonth} bulan`,
       `• Total: ${formatIdr(selectedService.priceIdr)}`
     ]
     if (notes.trim()) lines.push(`• Catatan: ${notes.trim()}`)
     return lines.join('\n')
   }
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    if (!canSubmit) return
+  function buildPreferredDate(): string | undefined {
+    if (selectedDay === null || !selectedSlot) return undefined
+    const m = selectedSlot.match(/(\d{1,2}):(\d{2})/)
+    const h = m ? Number(m[1]) : 9
+    const min = m ? Number(m[2]) : 0
+    return new Date(year, month, selectedDay, h, min).toISOString()
+  }
+
+  function openWaFallback() {
     const url = `https://wa.me/${waNumber}?text=${encodeURIComponent(buildWaMessage())}`
     window.open(url, '_blank')
-    router.push('/checkout/success')
+  }
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (!canSubmit || !selectedService || submitting) return
+
+    // API requires digits-only phone (regex) and a cuid serviceId. Strip
+    // spaces/dashes/parens the user may have typed: 0812-3456 -> 08123456.
+    const cleanPhone = phone.replace(/[^\d+]/g, '')
+
+    setSubmitting(true)
+    setErrorMsg(null)
+
+    const payload = {
+      customer: { name: parentName.trim(), phone: cleanPhone },
+      child: {
+        name: babyName.trim(),
+        ...(ageValid ? { ageMonth: ageNum } : {})
+      },
+      items: [{ type: 'SERVICE' as const, serviceId: selectedService.id, qty: 1 }],
+      ...(buildPreferredDate() ? { preferredDate: buildPreferredDate() } : {}),
+      ...(notes.trim() ? { notes: notes.trim() } : {})
+    }
+
+    const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+
+    try {
+      const res = await fetch(`${BASE}/v1/checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+
+      if (res.ok) {
+        router.push('/checkout/success')
+        return
+      }
+
+      if (res.status >= 400 && res.status < 500) {
+        // Bad input — DON'T fake success. Show error so user can fix it.
+        let msg = 'Data pesanan tidak valid. Periksa nomor WhatsApp dan layanan.'
+        try {
+          const body = await res.json()
+          if (body?.issues?.[0]?.path?.includes('phone')) {
+            msg = 'Nomor WhatsApp tidak valid. Gunakan format 08xxxxxxxxxx (angka saja).'
+          } else if (body?.issues?.[0]?.path?.includes('serviceId')) {
+            msg = 'Layanan tidak valid. Muat ulang halaman lalu pilih layanan lagi.'
+          }
+        } catch {
+          /* keep generic msg */
+        }
+        setErrorMsg(msg)
+        setSubmitting(false)
+        return
+      }
+
+      // 5xx — server broken, don't lose the order: fall back to WhatsApp.
+      throw new Error(`server ${res.status}`)
+    } catch (err) {
+      console.error('checkout submit failed', err)
+      setErrorMsg('Server bermasalah. Mengalihkan ke WhatsApp...')
+      openWaFallback()
+      router.push('/checkout/success')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -153,14 +236,33 @@ export function CheckoutForm({
             <TextField label="Nama Orang Tua" placeholder="Contoh: Siti Aminah" value={parentName} onChange={setParentName} />
             <TextField
               label="Nomor WhatsApp"
-              placeholder="0812xxxx"
+              placeholder="081234567890"
               value={phone}
               onChange={setPhone}
               type="tel"
               inputMode="tel"
+              error={phoneError}
+              hint={
+                phoneError
+                  ? 'Nomor tidak valid. Format: 08xxxxxxxxxx (10–14 angka, tanpa spasi/strip).'
+                  : 'Format: 08xxxxxxxxxx — admin hubungi via WhatsApp ini.'
+              }
             />
             <TextField label="Nama Bayi" placeholder="Nama lengkap si kecil" value={babyName} onChange={setBabyName} />
-            <SelectField label="Usia Bayi" value={babyAge} options={AGE_OPTIONS} onChange={setBabyAge} />
+            <TextField
+              label="Usia Bayi (bulan)"
+              placeholder="Contoh: 8"
+              value={babyAgeMonth}
+              onChange={(v) => setBabyAgeMonth(v.replace(/[^\d]/g, ''))}
+              type="text"
+              inputMode="numeric"
+              error={ageError}
+              hint={
+                ageError
+                  ? `Masukkan usia dalam bulan (0–${MAX_AGE_MONTH}).`
+                  : 'Usia bayi dalam bulan. Contoh: 1 tahun = 12.'
+              }
+            />
           </div>
           <TextAreaField
             label="Catatan (opsional)"
@@ -336,16 +438,19 @@ export function CheckoutForm({
             </div>
             <button
               type="submit"
-              disabled={!canSubmit}
+              disabled={!canSubmit || submitting}
               className={
-                canSubmit
+                canSubmit && !submitting
                   ? 'flex w-full items-center justify-center gap-2 rounded-full bg-gayatri-600 py-4 text-sm font-semibold tracking-wide text-white transition-all hover:opacity-90 active:scale-95'
                   : 'flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-full bg-outline-soft/40 py-4 text-sm font-semibold tracking-wide text-white'
               }
             >
-              <span className="material-symbols-outlined">verified</span>
-              Konfirmasi via WhatsApp
+              <span className="material-symbols-outlined">{submitting ? 'hourglass_top' : 'verified'}</span>
+              {submitting ? 'Mengirim Pesanan...' : 'Konfirmasi Pesanan'}
             </button>
+            {errorMsg && (
+              <p className="mt-3 text-center text-xs text-red-600">{errorMsg}</p>
+            )}
             <p className="mt-4 text-center text-xs text-charcoal-soft">
               Dengan menekan tombol, Anda menyetujui{' '}
               <a className="text-gayatri-600 underline" href="#">
@@ -445,7 +550,9 @@ function TextField({
   value,
   onChange,
   type = 'text',
-  inputMode
+  inputMode,
+  hint,
+  error
 }: {
   label: string
   placeholder?: string
@@ -453,6 +560,8 @@ function TextField({
   onChange: (v: string) => void
   type?: string
   inputMode?: 'text' | 'tel' | 'numeric' | 'email'
+  hint?: string
+  error?: boolean
 }) {
   return (
     <div className="space-y-2">
@@ -463,37 +572,16 @@ function TextField({
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-outline-soft/40 bg-cream-100 px-4 py-3 text-base text-charcoal transition-all focus:border-gayatri-600 focus:outline-none focus:ring-2 focus:ring-gayatri-600/20"
+        aria-invalid={error}
+        className={
+          error
+            ? 'w-full rounded-lg border border-red-400 bg-cream-100 px-4 py-3 text-base text-charcoal transition-all focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-400/20'
+            : 'w-full rounded-lg border border-outline-soft/40 bg-cream-100 px-4 py-3 text-base text-charcoal transition-all focus:border-gayatri-600 focus:outline-none focus:ring-2 focus:ring-gayatri-600/20'
+        }
       />
-    </div>
-  )
-}
-
-function SelectField({
-  label,
-  value,
-  options,
-  onChange
-}: {
-  label: string
-  value: string
-  options: readonly string[]
-  onChange: (v: string) => void
-}) {
-  return (
-    <div className="space-y-2">
-      <label className="block text-sm font-semibold tracking-wide text-charcoal-soft">{label}</label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full appearance-none rounded-lg border border-outline-soft/40 bg-cream-100 px-4 py-3 text-base text-charcoal transition-all focus:border-gayatri-600 focus:outline-none focus:ring-2 focus:ring-gayatri-600/20"
-      >
-        {options.map((o) => (
-          <option key={o} value={o}>
-            {o}
-          </option>
-        ))}
-      </select>
+      {hint && (
+        <p className={error ? 'text-xs text-red-600' : 'text-xs text-charcoal-soft'}>{hint}</p>
+      )}
     </div>
   )
 }

@@ -27,8 +27,8 @@ export function ProductBannerSlider({ products }: { products: ProductDto[] }) {
   const product = products[current]
 
   return (
-    <section className="overflow-hidden bg-cream py-12 md:py-16">
-      <div className="mx-auto max-w-7xl px-5 md:px-20">
+    <section className="overflow-hidden bg-cream px-5 py-12 md:px-20 md:py-16">
+      <div className="mx-auto max-w-7xl">
         <div
           className="relative aspect-[16/9] overflow-hidden rounded-[2.5rem] shadow-glow-md md:aspect-[21/9]"
           onMouseEnter={() => setPaused(true)}
