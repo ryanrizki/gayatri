@@ -5,5 +5,5 @@ module.exports = {
   rootDir: 'src',
   testRegex: '.*\\.spec\\.ts$',
   moduleFileExtensions: ['ts', 'js', 'json'],
-  transform: { '^.+\\.ts$': ['ts-jest', { tsconfig: '<rootDir>/../tsconfig.json' }] }
+  transform: { '^.+\\.ts$': ['ts-jest', { tsconfig: './tsconfig.json' }] }
 }

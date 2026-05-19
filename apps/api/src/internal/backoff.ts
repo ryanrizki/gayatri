@@ -10,7 +10,7 @@ export interface RetryDecision {
 export function computeRetry(prevAttempts: number, now: Date = new Date()): RetryDecision {
   const attempts = prevAttempts + 1
   if (attempts >= MAX_ATTEMPTS) {
-    return { attempts, status: 'DEAD', nextRunAt: now }
+    return { attempts, status: 'DEAD', nextRunAt: new Date(now.getTime()) }
   }
   return { attempts, status: 'FAILED', nextRunAt: new Date(now.getTime() + attempts * 5 * 60_000) }
 }

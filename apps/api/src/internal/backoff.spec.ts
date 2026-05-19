@@ -18,5 +18,6 @@ describe('computeRetry', () => {
     const r = computeRetry(MAX_ATTEMPTS - 1, now)
     expect(r.attempts).toBe(MAX_ATTEMPTS)
     expect(r.status).toBe('DEAD')
+    expect(r.nextRunAt.getTime()).toBe(now.getTime())
   })
 })
