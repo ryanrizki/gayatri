@@ -139,39 +139,73 @@ export class InternalService {
     const fmtHour = (d: Date) =>
       d.toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' })
 
-    const h1List = await this.db.checkout.findMany({
-      where: { status: { in: ['CONFIRMED', 'RESCHEDULED'] }, reminderH1Sent: false, scheduledAt: range(now + 24 * 3600_000) },
-      include: { customer: true, child: true, branch: true }
-    })
-    for (const c of h1List) {
-      await this.queueReminder(c.id, 'T-CUS-005', {
-        hour: c.scheduledAt ? fmtHour(c.scheduledAt) : '-',
-        baby_name: c.child?.name ?? c.customer.name,
-        address: c.branch?.address ?? '-'
-      }, c.customer.phone)
-      await this.db.checkout.update({ where: { id: c.id }, data: { reminderH1Sent: true } })
+    // Change A: hoist template lookup once per tier
+    const h1Tpl = await this.db.waTemplate.findUnique({ where: { code: 'T-CUS-005' } })
+
+    let h1List: any[] = []
+    try {
+      h1List = await this.db.checkout.findMany({
+        where: { status: { in: ['CONFIRMED', 'RESCHEDULED'] }, reminderH1Sent: false, scheduledAt: range(now + 24 * 3600_000) },
+        include: { customer: true, child: true, branch: true }
+      })
+    } catch (err: any) {
+      this.logger.error(`H-1 findMany failed: ${err?.message ?? err}`)
+      h1List = []
     }
 
-    const h3List = await this.db.checkout.findMany({
-      where: { status: { in: ['CONFIRMED', 'RESCHEDULED'] }, reminderH3Sent: false, scheduledAt: range(now + 3 * 3600_000) },
-      include: { customer: true, child: true, branch: true }
-    })
+    let h1 = 0
+    for (const c of h1List) {
+      try {
+        await this.queueReminder(c.id, 'T-CUS-005', h1Tpl, {
+          hour: c.scheduledAt ? fmtHour(c.scheduledAt) : '-',
+          baby_name: c.child?.name ?? c.customer.name,
+          address: c.branch?.address ?? '-'
+        }, c.customer.phone)
+        await this.db.checkout.update({ where: { id: c.id }, data: { reminderH1Sent: true } })
+        h1++
+      } catch (err: any) {
+        this.logger.error(`reminder row ${c.id} failed: ${err?.message ?? err}`)
+        continue
+      }
+    }
+
+    // Change A: hoist template lookup once per tier
+    const h3Tpl = await this.db.waTemplate.findUnique({ where: { code: 'T-CUS-006' } })
+
+    let h3List: any[] = []
+    try {
+      h3List = await this.db.checkout.findMany({
+        where: { status: { in: ['CONFIRMED', 'RESCHEDULED'] }, reminderH3Sent: false, scheduledAt: range(now + 3 * 3600_000) },
+        include: { customer: true, child: true, branch: true }
+      })
+    } catch (err: any) {
+      this.logger.error(`H-3 findMany failed: ${err?.message ?? err}`)
+      h3List = []
+    }
+
+    let h3 = 0
     for (const c of h3List) {
-      await this.queueReminder(c.id, 'T-CUS-006', { baby_name: c.child?.name ?? c.customer.name }, c.customer.phone)
-      await this.db.checkout.update({ where: { id: c.id }, data: { reminderH3Sent: true } })
+      try {
+        await this.queueReminder(c.id, 'T-CUS-006', h3Tpl, { baby_name: c.child?.name ?? c.customer.name }, c.customer.phone)
+        await this.db.checkout.update({ where: { id: c.id }, data: { reminderH3Sent: true } })
+        h3++
+      } catch (err: any) {
+        this.logger.error(`reminder row ${c.id} failed: ${err?.message ?? err}`)
+        continue
+      }
     }
 
     if (h1List.length || h3List.length) this.logger.log(`reminders H1=${h1List.length} H3=${h3List.length}`)
-    return { h1: h1List.length, h3: h3List.length }
+    return { h1, h3 }
   }
 
   private async queueReminder(
     checkoutId: string,
     templateCode: 'T-CUS-005' | 'T-CUS-006',
+    tpl: { active: boolean } | null,
     vars: Record<string, string>,
     phone: string
-  ) {
-    const tpl = await this.db.waTemplate.findUnique({ where: { code: templateCode } })
+  ): Promise<void> {
     if (!tpl || !tpl.active) return
     await this.db.waLog.create({
       data: {

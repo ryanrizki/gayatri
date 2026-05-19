@@ -131,6 +131,78 @@ describe('InternalService.scanReminders', () => {
     expect(db.checkout.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { reminderH1Sent: true } })
     expect(out).toEqual({ h1: 1, h3: 0 })
   })
+
+  it('still marks reminderH1Sent when template missing (no WaLog created)', async () => {
+    const due = {
+      id: 'c1', code: 'GYT-1',
+      scheduledAt: new Date(Date.now() + 24 * 3600_000),
+      customer: { name: 'Ana', phone: '08123456789' },
+      child: { name: 'Bayi' }, branch: { address: 'Jl. A' }
+    }
+    const db = {
+      waTemplate: { findUnique: jest.fn().mockResolvedValue(null) },
+      waLog: { create: jest.fn().mockResolvedValue({ id: 'l1' }) },
+      checkout: {
+        findMany: jest.fn().mockResolvedValueOnce([due]).mockResolvedValueOnce([]),
+        update: jest.fn().mockResolvedValue({})
+      }
+    } as any
+    const svc = new InternalService(db, () => null)
+
+    const out = await svc.scanReminders()
+
+    expect(db.waLog.create).not.toHaveBeenCalled()
+    expect(db.checkout.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { reminderH1Sent: true } })
+    expect(out).toEqual({ h1: 1, h3: 0 })
+  })
+
+  it('processes H-3 reminders (T-CUS-006, baby_name only)', async () => {
+    const dueH3 = {
+      id: 'c2',
+      scheduledAt: new Date(Date.now() + 3 * 3600_000),
+      customer: { name: 'Budi', phone: '08129999' },
+      child: { name: 'Bayi2' },
+      branch: { address: '-' }
+    }
+    const db = {
+      waTemplate: { findUnique: jest.fn().mockResolvedValue({ code: 'T-CUS-006', body: 'Halo {baby_name}', active: true }) },
+      waLog: { create: jest.fn().mockResolvedValue({ id: 'l2' }) },
+      checkout: {
+        findMany: jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([dueH3]),
+        update: jest.fn().mockResolvedValue({})
+      }
+    } as any
+    const svc = new InternalService(db, () => null)
+
+    const out = await svc.scanReminders()
+
+    expect(db.waLog.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ checkoutId: 'c2', template: 'T-CUS-006', status: 'QUEUED' })
+    }))
+    expect(db.checkout.update).toHaveBeenCalledWith({ where: { id: 'c2' }, data: { reminderH3Sent: true } })
+    expect(out).toEqual({ h1: 0, h3: 1 })
+  })
+
+  it('row failure is isolated and does not throw', async () => {
+    const due = {
+      id: 'c1', code: 'GYT-1',
+      scheduledAt: new Date(Date.now() + 24 * 3600_000),
+      customer: { name: 'Ana', phone: '08123456789' },
+      child: { name: 'Bayi' }, branch: { address: 'Jl. A' }
+    }
+    const db = {
+      waTemplate: { findUnique: jest.fn().mockResolvedValue({ code: 'T-CUS-005', body: 'Besok {hour}', active: true }) },
+      waLog: { create: jest.fn().mockResolvedValue({ id: 'l1' }) },
+      checkout: {
+        findMany: jest.fn().mockResolvedValueOnce([due]).mockResolvedValueOnce([]),
+        update: jest.fn().mockRejectedValueOnce(new Error('db down'))
+      }
+    } as any
+    const svc = new InternalService(db, () => null)
+
+    await expect(svc.scanReminders()).resolves.toEqual({ h1: 0, h3: 0 })
+    expect(db.waLog.create).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('CLAIM_SQL (lease + crash-safety)', () => {
