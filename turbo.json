@@ -5,7 +5,6 @@
     "NODE_ENV",
     "TZ",
     "DATABASE_URL",
-    "REDIS_URL",
     "API_PORT",
     "API_URL",
     "WEB_PORT",
@@ -23,7 +22,12 @@
     "SUPABASE_ANON_KEY",
     "SUPABASE_SERVICE_KEY",
     "SUPABASE_BUCKET",
-    "SENTRY_DSN"
+    "SENTRY_DSN",
+    "INTERNAL_SECRET",
+    "OPENWA_URL",
+    "OPENWA_API_KEY",
+    "OPENWA_SEND_PATH",
+    "OPENWA_API_KEY_HEADER"
   ],
   "tasks": {
     "build": {
