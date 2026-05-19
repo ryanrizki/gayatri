@@ -56,10 +56,11 @@ async function main() {
     { slug: 'baby-swim', name: 'Baby Swim', description: 'Berenang sehat dengan neck ring', priceIdr: 125000, durationMin: 30, ageMinMonth: 3, ageMaxMonth: 18 }
   ]
   for (const s of services) {
+    const imageUrl = `https://picsum.photos/seed/${s.slug}/600/400`
     await prisma.service.upsert({
       where: { slug: s.slug },
-      update: {},
-      create: { ...s, active: true, gallery: [] }
+      update: { imageUrl, gallery: [imageUrl] },
+      create: { ...s, active: true, imageUrl, gallery: [imageUrl] }
     })
   }
 
@@ -70,10 +71,11 @@ async function main() {
     { slug: 'baby-neck-ring', name: 'Neck Ring Swim', description: 'Pelampung leher untuk baby swim', priceIdr: 85000, stock: 15, categoryId: toolCat.id }
   ]
   for (const p of products) {
+    const imageUrl = `https://picsum.photos/seed/${p.slug}/600/400`
     await prisma.product.upsert({
       where: { slug: p.slug },
-      update: {},
-      create: { ...p, active: true, gallery: [] }
+      update: { imageUrl, gallery: [imageUrl] },
+      create: { ...p, active: true, imageUrl, gallery: [imageUrl] }
     })
   }
 
