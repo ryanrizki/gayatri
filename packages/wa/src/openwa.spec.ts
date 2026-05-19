@@ -18,10 +18,10 @@ describe('OpenWaAdapter', () => {
     )
     const res = await new OpenWaAdapter(cfg).send('08123456789', 'hello')
     expect(res).toEqual({ ok: true, providerRef: 'abc' })
-    const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toBe('http://openwa.local/api/messages/send')
-    expect((init!.headers as Record<string, string>)['X-Api-Key']).toBe('k1')
-    expect(JSON.parse(init!.body as string)).toEqual({ to: '628123456789', message: 'hello' })
+    const call = fetchMock.mock.calls[0]!
+    expect(call[0]).toBe('http://openwa.local/api/messages/send')
+    expect((call[1]!.headers as Record<string, string>)['X-Api-Key']).toBe('k1')
+    expect(JSON.parse(call[1]!.body as string)).toEqual({ to: '628123456789', message: 'hello' })
   })
 
   it('maps non-2xx to ok:false with reason', async () => {

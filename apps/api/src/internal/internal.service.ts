@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../prisma.service'
-import { createGateway, renderTemplate } from '@gayatri/wa'
+import { renderTemplate } from '@gayatri/wa'
 import type { WaGateway } from '@gayatri/wa'
 import { computeRetry, MAX_ATTEMPTS } from './backoff'
 
