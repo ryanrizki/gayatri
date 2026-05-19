@@ -14,15 +14,14 @@
 | Backend (`@gayatri/api`) | NestJS + TypeScript | Modular, role guard, swagger |
 | Database | PostgreSQL 16 | Relational fit |
 | ORM | Prisma | Type-safe |
-| Cache/Queue | Redis + BullMQ | WA send job, dedupe lock |
 | Auth Admin | NextAuth v5 email+password (bcrypt) | Standard |
 | Auth Customer | None (guest checkout) | Phone+name only |
 | File storage | Supabase Storage / Cloudinary | CDN + transform |
-| WA Gateway v1 | Fonnte (REST API) | Cheap, fast onboard |
+| WA Gateway (default) | OpenWA (self-host, whatsapp-web.js) | $0, no per-msg cost |
+| WA Gateway (fallback) | Fonnte (REST API) | Cheap, fast onboard |
 | WA Gateway v2 | Meta WA Business API (via Wati/360dialog) | Phase 4 migrate |
-| Worker (`@gayatri/worker`) | Node + BullMQ + node-cron | WA send, reminder scan |
 | Hosting FE | Vercel | Next.js native |
-| Hosting BE+Worker | Railway / Fly.io | Persistent Redis + cron |
+| Hosting BE (API) | Railway / Fly.io | Stateless API; external cron (cron-job.org) calls POST /v1/internal/tick |
 | DB host | Supabase | Managed Postgres + storage |
 | Monitoring | Sentry + Better Stack | Error + uptime |
 
@@ -37,29 +36,28 @@
                      │ HTTPS REST                 │
                      └─────────────┬──────────────┘
                                    │
-                          ┌────────▼─────────┐
-                          │   @gayatri/api   │
-                          │   NestJS         │
-                          └───┬──────────┬───┘
-                              │          │
-                       ┌──────▼────┐ ┌───▼──────┐
-                       │ Postgres  │ │  Redis   │
-                       │ (Supabase)│ │ BullMQ   │
-                       └───────────┘ └────┬─────┘
-                                          │
-                                ┌─────────▼──────────┐
-                                │  @gayatri/worker   │
-                                │  cron + queue      │
-                                └─────────┬──────────┘
-                                          │
-                                ┌─────────▼──────────┐
-                                │  @gayatri/wa       │
-                                │  Fonnte adapter    │
-                                └─────────┬──────────┘
-                                          │
-                                ┌─────────▼──────────┐
-                                │  WhatsApp API      │
-                                └────────────────────┘
+                          ┌────────▼─────────┐       ┌─────────────────────┐
+                          │   @gayatri/api   │◄──────│  External cron      │
+                          │   NestJS         │       │  (cron-job.org)     │
+                          │  POST /internal/ │       │  POST /v1/internal/ │
+                          │       tick       │       │       tick          │
+                          └───┬──────────────┘       └─────────────────────┘
+                              │
+                       ┌──────▼────────┐
+                       │   Postgres    │
+                       │   (Supabase)  │
+                       │   WaLog queue │
+                       └──────┬────────┘
+                              │ drainWaJobs()
+                     ┌────────▼─────────┐
+                     │   @gayatri/wa    │
+                     │  OpenWA adapter  │
+                     │  (Fonnte fallbk) │
+                     └────────┬─────────┘
+                              │
+                     ┌────────▼─────────┐
+                     │  WhatsApp API    │
+                     └──────────────────┘
 ```
 
 ## 3. Monorepo Structure
@@ -69,8 +67,7 @@ gayatri/
 ├── apps/
 │   ├── web/              # Next.js customer FE
 │   ├── admin/            # Next.js admin FE
-│   ├── api/              # NestJS REST API
-│   └── worker/           # Cron + BullMQ
+│   └── api/              # NestJS REST API
 ├── packages/
 │   ├── db/               # Prisma schema + client
 │   ├── ui/               # shadcn shared
@@ -351,20 +348,13 @@ class WaService {
 }
 ```
 
-Worker job:
-1. Pop `wa:send`
-2. Call adapter `send`
-3. Update `WaLog` status + sentAt
-4. On error retry 3x exponential
-
-Cron `*/15 * * * *`:
-- Scan `Checkout` where `status=CONFIRMED|RESCHEDULED` and scheduledAt within next 24h±15min and `reminderH1Sent=false`
-- Enqueue T-CUS-005, then set flag (transaction)
-- Same for H-3jam (T-CUS-006, reminderH3Sent)
+Tick drain (`POST /v1/internal/tick`, called by external cron via cron-job.org):
+1. `scanReminders()` — scan `Checkout` where `status=CONFIRMED|RESCHEDULED` and scheduledAt within next 24h±15min and `reminderH1Sent=false`; enqueue T-CUS-005 WaLog rows, set flag (transaction). Same for H-3jam (T-CUS-006, reminderH3Sent).
+2. `drainWaJobs()` — claim `QUEUED` `WaLog` rows via Postgres `FOR UPDATE SKIP LOCKED` + 10-min lease; call `WaGateway.send()` (OpenWA default, Fonnte fallback); update `WaLog.status` to `SENT` or `FAILED`.
 
 ## 7. Concurrency / Dedupe
 
-- **Double-submit checkout:** Redis lock key `checkout:dedupe:{phone}:{cart_hash}` TTL 5min. Reject duplicate.
+- **Double-submit checkout:** DB lookup — rejects a new checkout when an identical (phone + cart hash) checkout exists within a 5-minute window (`Checkout.findFirst` where `cartHash`, `customer.phone`, and `createdAt >= now-5min`). No Redis.
 - **WA double-send:** Unique index `WaLog(checkoutId, template)` for state-change templates (CUS-002, 005, 006, 007). Reminder flags on Checkout enforce single send.
 - **Stock decrement:** Inside `confirm` transaction. Reject confirm if stock < qty for any product item.
 
@@ -387,10 +377,14 @@ Cron `*/15 * * * *`:
 
 ```
 DATABASE_URL=
-REDIS_URL=
 NEXTAUTH_SECRET=
 ADMIN_SESSION_SECRET=
+INTERNAL_SECRET=
 FONNTE_TOKEN=
+OPENWA_URL=
+OPENWA_API_KEY=
+OPENWA_SEND_PATH=
+OPENWA_API_KEY_HEADER=
 ADMIN_WA_NUMBER=628xxxx
 CLOUDINARY_URL=  (or SUPABASE_*)
 APP_URL_WEB=
@@ -436,7 +430,7 @@ TZ=Asia/Jakarta
 - [ ] `apps/api` NestJS scaffold + `packages/db` Prisma schema + seed
 - [ ] `POST /v1/checkout` API → replace WA deep-link v0
 - [ ] `GET /v1/catalog/*` live (currently using placeholder fallbacks)
-- [ ] `@gayatri/wa` Fonnte adapter + BullMQ worker
+- [ ] `@gayatri/wa` OpenWA+Fonnte adapters + `/v1/internal/tick` drain
 
 ### Phase 2
 - [ ] Admin FE: Login, Dashboard, Checkout List, Checkout Detail + action buttons

@@ -7,7 +7,6 @@ Baby spa booking + commerce platform with WhatsApp-native notifications.
 - `apps/web` — customer frontend (Next.js)
 - `apps/admin` — admin dashboard (Next.js)
 - `apps/api` — REST API (NestJS)
-- `apps/worker` — cron + WA queue consumer (Node)
 
 ## Packages
 
@@ -27,17 +26,19 @@ Baby spa booking + commerce platform with WhatsApp-native notifications.
 
 ## Stack
 
-Next.js · NestJS · Prisma · PostgreSQL · Redis · BullMQ · Midtrans · Fonnte/WA Business API
+Next.js · NestJS · Prisma · PostgreSQL · Midtrans · OpenWA/Fonnte (WaLog queue drained by POST /v1/internal/tick via external cron)
+
+> **Notifications:** WhatsApp is delivered via a durable `WaLog` queue. `WaService.enqueue()` writes a `QUEUED` row; an external cron (cron-job.org) calls `POST /v1/internal/tick` (guarded by `INTERNAL_SECRET`), which runs `scanReminders()` then `drainWaJobs()` — claims rows via Postgres `FOR UPDATE SKIP LOCKED` and sends via OpenWA (default) or Fonnte. No Redis, no worker process.
 
 ## Quick start
 
 ```sh
 ./scripts/setup.sh                  # copy .env, install deps, prisma generate
 ./scripts/secret.sh                 # generate a secret — paste into .env (JWT_SECRET + ADMIN_SESSION_SECRET)
-./scripts/services-up.sh            # start Postgres :5434 and Redis :6380 (docker-compose)
+./scripts/services-up.sh            # start Postgres :5434 (docker-compose)
 ./scripts/db-migrate.sh init        # first migration
 ./scripts/db-seed.sh                # seed admin user + sample catalog
-./scripts/dev.sh                    # api :4010 · web :3000 · admin :3001 · worker
+./scripts/dev.sh                    # api :4010 · web :3000 · admin :3001
 ```
 
 Default admin login is created by the seed script — check [packages/db/prisma/seed.ts](./packages/db/prisma/seed.ts) for credentials.
@@ -50,11 +51,10 @@ All scripts live in [scripts/](./scripts/) (see [scripts/README.md](./scripts/RE
 
 | Script | What it does |
 |---|---|
-| `./scripts/dev.sh` | Run api + web + admin + worker in parallel (Turbo) |
+| `./scripts/dev.sh` | Run api + web + admin in parallel (Turbo) |
 | `./scripts/dev-api.sh` | API only (`:4000`) |
 | `./scripts/dev-web.sh` | Customer web only (`:3000`) |
 | `./scripts/dev-admin.sh` | Admin only (`:3001`) |
-| `./scripts/dev-worker.sh` | WA worker only |
 
 ### Build & check
 

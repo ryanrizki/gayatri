@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run all apps in parallel via Turbo (api + web + admin + worker).
+# Run all apps in parallel via Turbo (api + web + admin).
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./_lib.sh

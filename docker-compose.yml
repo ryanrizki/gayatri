@@ -17,20 +17,5 @@ services:
       timeout: 3s
       retries: 10
 
-  redis:
-    image: redis:7-alpine
-    container_name: gayatri-redis
-    restart: unless-stopped
-    ports:
-      - "6380:6379"
-    volumes:
-      - gayatri_redis:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
 volumes:
   gayatri_db:
-  gayatri_redis:

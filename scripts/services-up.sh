@@ -14,6 +14,6 @@ else
   exit 127
 fi
 
-log "Starting Postgres :5433 and Redis :6380"
+log "Starting Postgres :5434"
 "${COMPOSE[@]}" up -d
 log "Services ready"
