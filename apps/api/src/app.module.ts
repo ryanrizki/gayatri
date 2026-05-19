@@ -7,6 +7,7 @@ import { CatalogModule } from './catalog/catalog.module'
 import { CheckoutModule } from './checkout/checkout.module'
 import { AdminModule } from './admin/admin.module'
 import { WaModule } from './wa/wa.module'
+import { InternalModule } from './internal/internal.module'
 
 @Module({
   imports: [
@@ -18,7 +19,8 @@ import { WaModule } from './wa/wa.module'
     CatalogModule,
     CheckoutModule,
     AdminModule,
-    WaModule
+    WaModule,
+    InternalModule
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }]
