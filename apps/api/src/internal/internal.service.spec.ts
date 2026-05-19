@@ -103,6 +103,36 @@ describe('InternalService.drainWaJobs', () => {
   })
 })
 
+describe('InternalService.scanReminders', () => {
+  afterEach(() => jest.restoreAllMocks())
+
+  it('creates H-1 QUEUED log and marks reminderH1Sent', async () => {
+    const due = {
+      id: 'c1', code: 'GYT-1',
+      scheduledAt: new Date(Date.now() + 24 * 3600_000),
+      customer: { name: 'Ana', phone: '08123456789' },
+      child: { name: 'Bayi' }, branch: { address: 'Jl. A' }
+    }
+    const db = {
+      waTemplate: { findUnique: jest.fn().mockResolvedValue({ code: 'T-CUS-005', body: 'Besok {hour}', active: true }) },
+      waLog: { create: jest.fn().mockResolvedValue({ id: 'l1' }) },
+      checkout: {
+        findMany: jest.fn().mockResolvedValueOnce([due]).mockResolvedValueOnce([]),
+        update: jest.fn().mockResolvedValue({})
+      }
+    } as any
+    const svc = new InternalService(db, () => null)
+
+    const out = await svc.scanReminders()
+
+    expect(db.waLog.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ checkoutId: 'c1', template: 'T-CUS-005', status: 'QUEUED' })
+    }))
+    expect(db.checkout.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { reminderH1Sent: true } })
+    expect(out).toEqual({ h1: 1, h3: 0 })
+  })
+})
+
 describe('CLAIM_SQL (lease + crash-safety)', () => {
   it('reclaims stale SENDING rows and sets a lease on claim', () => {
     const { CLAIM_SQL } = require('./internal.service')

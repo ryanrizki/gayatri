@@ -133,6 +133,55 @@ export class InternalService {
   }
 
   async scanReminders(): Promise<{ h1: number; h3: number }> {
-    return { h1: 0, h3: 0 } // implemented in Task 7
+    const now = Date.now()
+    const HALF = 7.5 * 60_000
+    const range = (centerMs: number) => ({ gte: new Date(centerMs - HALF), lte: new Date(centerMs + HALF) })
+    const fmtHour = (d: Date) =>
+      d.toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' })
+
+    const h1List = await this.db.checkout.findMany({
+      where: { status: { in: ['CONFIRMED', 'RESCHEDULED'] }, reminderH1Sent: false, scheduledAt: range(now + 24 * 3600_000) },
+      include: { customer: true, child: true, branch: true }
+    })
+    for (const c of h1List) {
+      await this.queueReminder(c.id, 'T-CUS-005', {
+        hour: c.scheduledAt ? fmtHour(c.scheduledAt) : '-',
+        baby_name: c.child?.name ?? c.customer.name,
+        address: c.branch?.address ?? '-'
+      }, c.customer.phone)
+      await this.db.checkout.update({ where: { id: c.id }, data: { reminderH1Sent: true } })
+    }
+
+    const h3List = await this.db.checkout.findMany({
+      where: { status: { in: ['CONFIRMED', 'RESCHEDULED'] }, reminderH3Sent: false, scheduledAt: range(now + 3 * 3600_000) },
+      include: { customer: true, child: true, branch: true }
+    })
+    for (const c of h3List) {
+      await this.queueReminder(c.id, 'T-CUS-006', { baby_name: c.child?.name ?? c.customer.name }, c.customer.phone)
+      await this.db.checkout.update({ where: { id: c.id }, data: { reminderH3Sent: true } })
+    }
+
+    if (h1List.length || h3List.length) this.logger.log(`reminders H1=${h1List.length} H3=${h3List.length}`)
+    return { h1: h1List.length, h3: h3List.length }
+  }
+
+  private async queueReminder(
+    checkoutId: string,
+    templateCode: 'T-CUS-005' | 'T-CUS-006',
+    vars: Record<string, string>,
+    phone: string
+  ) {
+    const tpl = await this.db.waTemplate.findUnique({ where: { code: templateCode } })
+    if (!tpl || !tpl.active) return
+    await this.db.waLog.create({
+      data: {
+        checkoutId,
+        to: phone,
+        template: templateCode,
+        payload: vars as object,
+        status: 'QUEUED',
+        provider: process.env.WA_PROVIDER ?? 'fonnte'
+      }
+    })
   }
 }
