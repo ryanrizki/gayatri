@@ -31,19 +31,37 @@ Convenience wrappers. All are idempotent and source `.env` from repo root.
 ./scripts/dev.sh
 ```
 
-## WhatsApp dev setup
+## WhatsApp setup
 
-API's `InternalCron` (every 30s) drains `WaLog` and calls the WA gateway. For sends to actually leave the box, run one of:
+API's `InternalCron` (every 30s) drains `WaLog` and calls the WA gateway.
+For sends to actually leave the box you need one of:
+
+### Recommended: in-process session, paired from admin UI
+
+1. `WA_PROVIDER=internal` in `.env`.
+2. Start the app stack as usual (`./scripts/dev.sh`).
+3. Open admin → **WA Connect** (`/wa/connect`) → click **Hubungkan WhatsApp**.
+4. Scan the QR with WhatsApp → Linked Devices.
+5. Status flips to **Terhubung** — pending `WaLog` rows drain within ~30s.
+
+Session cached in `.wa-session-api/` (gitignored). API restart resumes
+automatically.
+
+### Alternative: standalone bridge or stub
+
+For when you want the WA session outside the API process (or no real send):
 
 ```sh
-# Real free WhatsApp (scan QR with phone first run):
+# Real free WhatsApp via a separate process (scan QR in terminal):
 node scripts/wa-openwa-bridge.mjs
 
 # OR fake receiver — for testing the pipeline without a real device:
 node scripts/wa-stub.mjs
 ```
 
-Both listen on `:9099` and match `OPENWA_URL` in `.env`. Set `WA_PROVIDER=openwa`. Manual one-shot drain (no cron needed):
+Both listen on `:9099` matching `OPENWA_URL` in `.env`. Set `WA_PROVIDER=openwa`.
+
+### Manual one-shot drain (no cron needed)
 
 ```sh
 curl -X POST http://localhost:4010/v1/internal/tick \

@@ -8,6 +8,7 @@ import { CatalogModule } from './catalog/catalog.module'
 import { CheckoutModule } from './checkout/checkout.module'
 import { AdminModule } from './admin/admin.module'
 import { WaModule } from './wa/wa.module'
+import { WaSessionModule } from './wa-session/wa-session.module'
 import { InternalModule } from './internal/internal.module'
 
 @Module({
@@ -22,6 +23,7 @@ import { InternalModule } from './internal/internal.module'
     CheckoutModule,
     AdminModule,
     WaModule,
+    WaSessionModule,
     InternalModule
   ],
   controllers: [HealthController],

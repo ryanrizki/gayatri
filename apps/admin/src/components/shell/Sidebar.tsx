@@ -17,6 +17,7 @@ const NAV: { href: string; label: string; icon: string; roles?: Role[] }[] = [
   { href: '/therapists', label: 'Terapis', icon: 'group' },
   { href: '/customers', label: 'Pelanggan', icon: 'contacts' },
   { href: '/wa', label: 'WhatsApp', icon: 'chat', roles: ['OWNER', 'ADMIN'] },
+  { href: '/wa/connect', label: 'WA Connect', icon: 'qr_code_scanner', roles: ['OWNER', 'ADMIN'] },
   { href: '/settings', label: 'Pengaturan', icon: 'settings', roles: ['OWNER', 'ADMIN'] }
 ]
 

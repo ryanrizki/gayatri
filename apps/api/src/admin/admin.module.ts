@@ -20,6 +20,7 @@ import { AdminRolesGuard } from './roles.guard'
     PrismaService,
     AdminAuthGuard,
     AdminRolesGuard
-  ]
+  ],
+  exports: [AdminAuthGuard, AdminRolesGuard, AdminAuthService]
 })
 export class AdminModule {}

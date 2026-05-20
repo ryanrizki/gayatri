@@ -17,8 +17,8 @@
 | Auth Admin | NextAuth v5 email+password (bcrypt) | Standard |
 | Auth Customer | None (guest checkout) | Phone+name only |
 | File storage | Supabase Storage / Cloudinary | CDN + transform |
-| WA Gateway (default) | Baileys via local bridge (`scripts/wa-openwa-bridge.mjs`) speaking OpenWA REST contract | $0; talks WA WebSocket protocol directly, no Chromium. See [ADR-0001](adr/0001-baileys-over-fonnte-and-openwa.md). |
-| WA Gateway (testing) | Stub (`scripts/wa-stub.mjs`) — same contract, fake sends to a log file | Local dev without scanning QR |
+| WA Gateway (default) | **In-process Baileys**, paired via admin UI `/wa/connect` (`WA_PROVIDER=internal`) | Operator-grade UX, no terminal. Single process owns session. See [ADR-0004](adr/0004-in-process-wa-session.md). |
+| WA Gateway (dev/test) | Baileys standalone bridge (`scripts/wa-openwa-bridge.mjs`) OR stub (`scripts/wa-stub.mjs`), both via `WA_PROVIDER=openwa` | Useful when you want the WA session out of the API process or fake sends. See [ADR-0001](adr/0001-baileys-over-fonnte-and-openwa.md). |
 | WA Gateway (hosted) | Fonnte (REST API) | Set `WA_PROVIDER=fonnte` + real device token |
 | WA Gateway v2 | Meta WA Business API (via Wati/360dialog) | Phase 4 migrate |
 | Hosting FE | Vercel | Next.js native |

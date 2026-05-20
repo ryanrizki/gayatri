@@ -42,3 +42,4 @@ coverage
 
 # open-wa session
 .wa-session/
+.wa-session-api/
