@@ -106,7 +106,8 @@ export type WaTemplateUpdate = z.infer<typeof WaTemplateUpdate>
 
 export const SETTINGS_KEYS = [
   'business_name',
-  'wa_number',
+  // Receives admin WA notifications (T-ADM-*). Read by wa.service.notifyAdmin*.
+  'admin_wa_number',
   'business_phone',
   'business_email',
   'business_address',
@@ -117,9 +118,24 @@ export const SETTINGS_KEYS = [
 ] as const
 export type SettingKey = (typeof SETTINGS_KEYS)[number]
 
+// Intl Indonesia WA: 62 + 8-14 digits (no leading +/0).
+const adminWaRegex = /^62[0-9]{8,14}$/
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+// "" or valid -> allows empty for optional-with-format fields.
+const emptyOr = (re: RegExp, msg: string) =>
+  z.string().refine((v) => v === '' || re.test(v), { message: msg })
+
 export const SettingsUpsert = z
-  .record(z.string(), z.string().max(4000))
-  .refine((o) => Object.keys(o).every((k) => (SETTINGS_KEYS as readonly string[]).includes(k)), {
-    message: 'unknown settings key'
+  .object({
+    business_name: z.string().max(200).optional(),
+    admin_wa_number: emptyOr(adminWaRegex, 'admin_wa_number: 62 + 8–14 angka, tanpa 0/+').optional(),
+    business_phone: z.string().max(50).optional(),
+    business_email: emptyOr(emailRegex, 'business_email: format email tidak valid').optional(),
+    business_address: z.string().max(500).optional(),
+    business_hours: z.string().max(1000).optional(),
+    about_title: z.string().max(200).optional(),
+    about_body: z.string().max(4000).optional(),
+    footer_tagline: z.string().max(200).optional()
   })
+  .strict() // unknown keys produce a precise path -> better client errors
 export type SettingsUpsert = z.infer<typeof SettingsUpsert>

@@ -39,3 +39,6 @@ Thumbs.db
 # coverage
 coverage
 .nyc_output
+
+# open-wa session
+.wa-session/

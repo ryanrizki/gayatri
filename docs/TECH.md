@@ -17,11 +17,12 @@
 | Auth Admin | NextAuth v5 email+password (bcrypt) | Standard |
 | Auth Customer | None (guest checkout) | Phone+name only |
 | File storage | Supabase Storage / Cloudinary | CDN + transform |
-| WA Gateway | OpenWA (self-host, whatsapp-web.js) | $0; `.env.example` default (`WA_PROVIDER=openwa`) |
-| WA Gateway (code-default fallback) | Fonnte (REST API) | Cheap, fast onboard; code-default when `WA_PROVIDER` unset |
+| WA Gateway (default) | Baileys via local bridge (`scripts/wa-openwa-bridge.mjs`) speaking OpenWA REST contract | $0; talks WA WebSocket protocol directly, no Chromium. See [ADR-0001](adr/0001-baileys-over-fonnte-and-openwa.md). |
+| WA Gateway (testing) | Stub (`scripts/wa-stub.mjs`) — same contract, fake sends to a log file | Local dev without scanning QR |
+| WA Gateway (hosted) | Fonnte (REST API) | Set `WA_PROVIDER=fonnte` + real device token |
 | WA Gateway v2 | Meta WA Business API (via Wati/360dialog) | Phase 4 migrate |
 | Hosting FE | Vercel | Next.js native |
-| Hosting BE (API) | Railway / Fly.io | Stateless API; external cron (cron-job.org) calls POST /v1/internal/tick |
+| Hosting BE (API) | Railway / Fly.io | Stateless API. Self-cron via `@nestjs/schedule` runs `/v1/internal/tick` every 30s. Disable with `INTERNAL_CRON_ENABLED=false` to use external cron-job.org instead. See [ADR-0002](adr/0002-self-cron-via-nestjs-schedule.md). |
 | DB host | Supabase | Managed Postgres + storage |
 | Monitoring | Sentry + Better Stack | Error + uptime |
 
@@ -37,12 +38,12 @@
                      └─────────────┬──────────────┘
                                    │
                           ┌────────▼─────────┐       ┌─────────────────────┐
-                          │   @gayatri/api   │◄──────│  External cron      │
-                          │   NestJS         │       │  (cron-job.org)     │
-                          │  POST /internal/ │       │  POST /v1/internal/ │
-                          │       tick       │       │       tick          │
-                          └───┬──────────────┘       └─────────────────────┘
-                              │
+                          │   @gayatri/api   │       │ Self-cron (default) │
+                          │   NestJS         │◄──────│ @nestjs/schedule    │
+                          │  POST /internal/ │       │   every 30s         │
+                          │       tick       │       │ — or external cron  │
+                          └───┬──────────────┘       │   when disabled     │
+                              │                       └─────────────────────┘
                        ┌──────▼────────┐
                        │   Postgres    │
                        │   (Supabase)  │
@@ -51,8 +52,11 @@
                               │ drainWaJobs()
                      ┌────────▼─────────┐
                      │   @gayatri/wa    │
-                     │  OpenWA adapter  │
-                     │  (Fonnte fallbk) │
+                     │ OpenWA adapter   │
+                     │ → local bridge   │
+                     │  (Baileys, free) │
+                     │  Fonnte hosted   │
+                     │  Stub for tests  │
                      └────────┬─────────┘
                               │
                      ┌────────▼─────────┐
@@ -346,9 +350,9 @@ class WaService {
 }
 ```
 
-Tick drain (`POST /v1/internal/tick`, called by external cron via cron-job.org):
+Tick drain (`POST /v1/internal/tick`, fired by default by `InternalCron` every 30s via `@nestjs/schedule` — disable with `INTERNAL_CRON_ENABLED=false` to use an external scheduler like cron-job.org instead, to avoid double-firing):
 1. `scanReminders()` — scan `Checkout` where `status=CONFIRMED|RESCHEDULED` and scheduledAt within next 24h±15min and `reminderH1Sent=false`; enqueue T-CUS-005 WaLog rows, set flag (transaction). Same for H-3jam (T-CUS-006, reminderH3Sent).
-2. `drainWaJobs()` — claim `QUEUED` `WaLog` rows via Postgres `FOR UPDATE SKIP LOCKED` + 10-min lease; call `WaGateway.send()` (selected by `WA_PROVIDER` — code-default `fonnte`; `.env.example` ships `openwa`) via `createGateway()`; update `WaLog.status` to `SENT` or `FAILED`.
+2. `drainWaJobs()` — claim `QUEUED` `WaLog` rows via Postgres `FOR UPDATE SKIP LOCKED` + 10-min lease; call `WaGateway.send()` (selected by `WA_PROVIDER` — code-default `fonnte`; `.env.example` ships `openwa` pointing at the local Baileys bridge `scripts/wa-openwa-bridge.mjs`) via `createGateway()`; update `WaLog.status` to `SENT` or `FAILED`.
 
 ## 7. Concurrency / Dedupe
 
