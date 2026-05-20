@@ -43,8 +43,8 @@ export type CheckoutStatus = z.infer<typeof CheckoutStatus>
 
 export const ConfirmCheckout = z.object({
   scheduledAt: z.string().datetime(),
-  branchId: z.string().cuid().optional(),
-  therapistId: z.string().cuid().optional()
+  branchId: z.string().min(1).optional(),
+  therapistId: z.string().min(1).optional()
 })
 export type ConfirmCheckout = z.infer<typeof ConfirmCheckout>
 

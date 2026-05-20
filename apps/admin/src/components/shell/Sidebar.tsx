@@ -2,22 +2,56 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { cn } from '@/lib/cn'
 
 type Role = 'OWNER' | 'ADMIN' | 'STAFF'
 
-const NAV: { href: string; label: string; icon: string; roles?: Role[] }[] = [
+type NavLeaf = { href: string; label: string; icon: string; roles?: Role[] }
+type NavGroup = { label: string; icon: string; roles?: Role[]; children: NavLeaf[] }
+type NavItem = NavLeaf | NavGroup
+
+const isGroup = (i: NavItem): i is NavGroup => 'children' in i
+
+// Grouped by domain so the sidebar stays short. Single-link entries (Dashboard,
+// Pengaturan) live at the top level; everything else collapses under a group.
+const NAV: NavItem[] = [
   { href: '/', label: 'Dashboard', icon: 'dashboard' },
-  { href: '/checkouts', label: 'Checkout', icon: 'receipt_long' },
-  { href: '/services', label: 'Layanan', icon: 'spa' },
-  { href: '/products', label: 'Produk', icon: 'inventory_2' },
-  { href: '/categories', label: 'Kategori', icon: 'category' },
-  { href: '/banners', label: 'Banner', icon: 'image' },
-  { href: '/branches', label: 'Cabang', icon: 'store' },
-  { href: '/therapists', label: 'Terapis', icon: 'group' },
-  { href: '/customers', label: 'Pelanggan', icon: 'contacts' },
-  { href: '/wa', label: 'WhatsApp', icon: 'chat', roles: ['OWNER', 'ADMIN'] },
-  { href: '/wa/connect', label: 'WA Connect', icon: 'qr_code_scanner', roles: ['OWNER', 'ADMIN'] },
+  {
+    label: 'Pesanan',
+    icon: 'receipt_long',
+    children: [
+      { href: '/checkouts', label: 'Checkout', icon: 'shopping_bag' },
+      { href: '/customers', label: 'Pelanggan', icon: 'contacts' }
+    ]
+  },
+  {
+    label: 'Katalog',
+    icon: 'inventory_2',
+    children: [
+      { href: '/services', label: 'Layanan', icon: 'spa' },
+      { href: '/products', label: 'Produk', icon: 'shopping_bag' },
+      { href: '/categories', label: 'Kategori', icon: 'category' },
+      { href: '/banners', label: 'Banner', icon: 'image' }
+    ]
+  },
+  {
+    label: 'Operasi',
+    icon: 'business',
+    children: [
+      { href: '/branches', label: 'Cabang', icon: 'store' },
+      { href: '/therapists', label: 'Terapis', icon: 'group' }
+    ]
+  },
+  {
+    label: 'WhatsApp',
+    icon: 'chat',
+    roles: ['OWNER', 'ADMIN'],
+    children: [
+      { href: '/wa', label: 'Template & Log', icon: 'sms' },
+      { href: '/wa/connect', label: 'Pairing', icon: 'qr_code_scanner' }
+    ]
+  },
   { href: '/settings', label: 'Pengaturan', icon: 'settings', roles: ['OWNER', 'ADMIN'] }
 ]
 
@@ -27,9 +61,43 @@ const ROLE_LABEL: Record<Role, string> = {
   STAFF: 'Staf'
 }
 
+function matchPath(pathname: string, href: string): boolean {
+  if (href === '/') return pathname === '/'
+  return pathname === href || pathname.startsWith(href + '/')
+}
+
+function filterByRole(items: NavItem[], role: Role): NavItem[] {
+  return items
+    .filter((i) => !i.roles || i.roles.includes(role))
+    .map((i) =>
+      isGroup(i)
+        ? { ...i, children: i.children.filter((c) => !c.roles || c.roles.includes(role)) }
+        : i
+    )
+    .filter((i) => !isGroup(i) || i.children.length > 0)
+}
+
 export function Sidebar({ user }: { user: { email: string; role: Role } }) {
   const pathname = usePathname()
-  const items = NAV.filter((n) => !n.roles || n.roles.includes(user.role))
+  const items = filterByRole(NAV, user.role)
+
+  // Track which groups are open. Auto-open the group containing the active
+  // route on first render / when pathname changes; user can still toggle.
+  const [open, setOpen] = useState<Record<string, boolean>>({})
+  useEffect(() => {
+    setOpen((prev) => {
+      const next = { ...prev }
+      for (const i of items) {
+        if (isGroup(i) && i.children.some((c) => matchPath(pathname, c.href))) {
+          next[i.label] = true
+        }
+      }
+      return next
+    })
+    // items derived from user.role; recompute when pathname changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, user.role])
+
   const displayName = (user.email.split('@')[0] ?? 'Admin')
     .replace(/[._-]+/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase())
@@ -53,27 +121,50 @@ export function Sidebar({ user }: { user: { email: string; role: Role } }) {
 
       {/* Nav */}
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5">
-        {items.map((n) => {
-          const active = pathname === n.href || (n.href !== '/' && pathname.startsWith(n.href))
+        {items.map((item) => {
+          if (!isGroup(item)) {
+            const active = matchPath(pathname, item.href)
+            return <NavLink key={item.href} item={item} active={active} />
+          }
+          const isOpen = open[item.label] ?? false
+          const hasActiveChild = item.children.some((c) => matchPath(pathname, c.href))
           return (
-            <Link
-              key={n.href}
-              href={n.href}
-              className={cn(
-                'flex items-center gap-3 rounded-xl border-l-4 px-3 py-2.5 text-sm font-medium transition-colors',
-                active
-                  ? 'border-gayatri-600 bg-gayatri-50 text-gayatri-600'
-                  : 'border-transparent text-charcoal-soft hover:bg-cream-200 hover:text-charcoal'
-              )}
-            >
-              <span
-                className="material-symbols-outlined text-[20px]"
-                style={active ? { fontVariationSettings: "'FILL' 1" } : undefined}
+            <div key={item.label} className="space-y-1">
+              <button
+                type="button"
+                onClick={() => setOpen((p) => ({ ...p, [item.label]: !isOpen }))}
+                aria-expanded={isOpen}
+                className={cn(
+                  'flex w-full items-center gap-3 rounded-xl border-l-4 px-3 py-2.5 text-sm font-medium transition-colors',
+                  hasActiveChild
+                    ? 'border-gayatri-600 bg-gayatri-50 text-gayatri-600'
+                    : 'border-transparent text-charcoal-soft hover:bg-cream-200 hover:text-charcoal'
+                )}
               >
-                {n.icon}
-              </span>
-              {n.label}
-            </Link>
+                <span
+                  className="material-symbols-outlined text-[20px]"
+                  style={hasActiveChild ? { fontVariationSettings: "'FILL' 1" } : undefined}
+                >
+                  {item.icon}
+                </span>
+                <span className="flex-1 text-left">{item.label}</span>
+                <span
+                  className={cn(
+                    'material-symbols-outlined text-[18px] transition-transform',
+                    isOpen ? 'rotate-180' : ''
+                  )}
+                >
+                  expand_more
+                </span>
+              </button>
+              {isOpen && (
+                <div className="ml-3 space-y-0.5 border-l border-outline-soft/30 pl-3">
+                  {item.children.map((c) => (
+                    <NavLink key={c.href} item={c} active={matchPath(pathname, c.href)} compact />
+                  ))}
+                </div>
+              )}
+            </div>
           )
         })}
       </nav>
@@ -89,5 +180,28 @@ export function Sidebar({ user }: { user: { email: string; role: Role } }) {
         </div>
       </div>
     </aside>
+  )
+}
+
+function NavLink({ item, active, compact }: { item: NavLeaf; active: boolean; compact?: boolean }) {
+  return (
+    <Link
+      href={item.href}
+      className={cn(
+        'flex items-center gap-3 rounded-xl border-l-4 transition-colors',
+        compact ? 'px-2.5 py-2 text-[13px]' : 'px-3 py-2.5 text-sm font-medium',
+        active
+          ? 'border-gayatri-600 bg-gayatri-50 text-gayatri-600'
+          : 'border-transparent text-charcoal-soft hover:bg-cream-200 hover:text-charcoal'
+      )}
+    >
+      <span
+        className={cn('material-symbols-outlined', compact ? 'text-[18px]' : 'text-[20px]')}
+        style={active ? { fontVariationSettings: "'FILL' 1" } : undefined}
+      >
+        {item.icon}
+      </span>
+      {item.label}
+    </Link>
   )
 }

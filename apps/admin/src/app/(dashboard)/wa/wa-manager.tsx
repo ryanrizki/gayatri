@@ -17,10 +17,9 @@ import { cn } from '@/lib/cn'
 type Template = { code: string; name: string; body: string; active: boolean }
 type WaLog = {
   id: string
-  templateCode: string
+  template: string
   status: string
-  phone: string
-  body: string | null
+  to: string
   error: string | null
   createdAt: string
   checkoutId: string | null
@@ -179,8 +178,8 @@ function Logs() {
               {data.map((l) => (
                 <tr key={l.id}>
                   <td className="px-5 py-3 text-xs text-charcoal-soft">{formatDate(l.createdAt)}</td>
-                  <td className="px-5 py-3 font-mono text-xs">{l.templateCode}</td>
-                  <td className="px-5 py-3 text-charcoal-soft">{l.phone}</td>
+                  <td className="px-5 py-3 font-mono text-xs">{l.template}</td>
+                  <td className="px-5 py-3 text-charcoal-soft">{l.to}</td>
                   <td className="px-5 py-3">
                     <Badge tone={l.status === 'SENT' ? 'green' : l.status === 'FAILED' ? 'red' : 'amber'}>{l.status}</Badge>
                   </td>

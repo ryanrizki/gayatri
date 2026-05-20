@@ -43,7 +43,7 @@ export function ConnectPanel() {
   const { data } = useQuery<Status>({
     queryKey: ['wa-session-status'],
     queryFn: () => adminApi<Status>('/admin/wa-session/status'),
-    refetchInterval: 2000
+    refetchInterval: 3000
   })
 
   const connectM = useMutation({
@@ -147,7 +147,7 @@ export function ConnectPanel() {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={data.qrPng} alt="WhatsApp QR" className="h-[300px] w-[300px]" />
                 <p className="mt-3 text-center text-xs text-charcoal-soft">
-                  QR berubah otomatis tiap ~20 detik. Halaman ini polling status tiap 2 detik.
+                  QR berubah otomatis tiap ~20 detik. Halaman ini polling status tiap 3 detik.
                 </p>
               </div>
             ) : (

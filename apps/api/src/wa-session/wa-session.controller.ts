@@ -1,4 +1,5 @@
 import { Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common'
+import { SkipThrottle } from '@nestjs/throttler'
 import { AdminAuthGuard } from '../admin/auth.guard'
 import { AdminRolesGuard } from '../admin/roles.guard'
 import { Roles } from '../admin/roles.decorator'
@@ -11,6 +12,7 @@ export class WaSessionController {
   constructor(private readonly svc: WaSessionService) {}
 
   @Get('status')
+  @SkipThrottle()
   status() {
     return this.svc.status()
   }
