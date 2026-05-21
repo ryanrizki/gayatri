@@ -14,7 +14,7 @@ async function bootstrap() {
   app.use(cookieParser())
   app.setGlobalPrefix('v1')
   const port = Number(process.env.PORT ?? process.env.API_PORT ?? 4000)
-  await app.listen(port)
+  await app.listen(port, '0.0.0.0')
   console.log(`Gayatri API listening on :${port}`)
 }
 

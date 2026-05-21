@@ -1,0 +1,42 @@
+# Fly.io config — Gayatri API
+# Deploy:  fly deploy
+# Status:  fly status
+# Logs:    fly logs
+
+app = "gayatri-api"
+primary_region = "sin"  # Singapore — closest to ID
+
+[build]
+  dockerfile = "apps/api/Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  TZ = "Asia/Jakarta"
+  API_PORT = "4010"
+  WA_PROVIDER = "internal"
+  INTERNAL_CRON_ENABLED = "true"
+
+[http_service]
+  internal_port = 4010
+  force_https = true
+  auto_stop_machines = "off"     # keep alive for WA cron + Baileys session
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval = "30s"
+    method = "get"
+    path = "/v1/health"
+    protocol = "http"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"   # 256mb tight for Baileys + Prisma; 512 safer
+
+[[mounts]]
+  source = "wa_session"
+  destination = "/app/.wa-session-api"
+  initial_size = "1gb"

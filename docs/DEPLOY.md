@@ -1,6 +1,8 @@
 # Deployment Guide
 
-**Stack:** Supabase (Postgres) · Railway (API) · Vercel (Web + Admin)
+**Stack:** Supabase (Postgres) · Fly.io (API) · Vercel (Web + Admin)
+
+> Railway is an alternative — see "Railway alternative" at the bottom.
 
 ---
 
@@ -18,44 +20,74 @@
 
 ---
 
-## 2. Railway — API
+## 2. Fly.io — API
 
-### First time
+### Install CLI + login
 
-1. [railway.app](https://railway.app) → New Project → Deploy from GitHub repo.
-2. Select root of this repo.
-3. Railway detects `apps/api/Dockerfile` via `apps/api/railway.toml`.
+```sh
+curl -L https://fly.io/install.sh | sh
+export FLYCTL_INSTALL="$HOME/.fly"
+export PATH="$FLYCTL_INSTALL/bin:$PATH"
+fly auth login        # opens browser
+```
 
-### Environment variables (Railway → Variables tab)
+### Launch (first time only)
 
-| Key | Value |
-|-----|-------|
-| `DATABASE_URL` | Supabase connection string |
-| `API_PORT` | `4010` (or Railway sets `PORT` automatically — see note) |
-| `ADMIN_SESSION_SECRET` | 96-char hex (`./scripts/secret.sh`) |
-| `JWT_SECRET` | 96-char hex (different value) |
-| `INTERNAL_SECRET` | any strong random string |
-| `CORS_ORIGINS` | `https://web.yourdomain.com,https://admin.yourdomain.com` |
-| `APP_URL_WEB` | `https://web.yourdomain.com` |
-| `APP_URL_ADMIN` | `https://admin.yourdomain.com` |
-| `WA_PROVIDER` | `internal` |
-| `ADMIN_WA_NUMBER` | `62xxxxxxxxxx` |
-| `TZ` | `Asia/Jakarta` |
-| `NODE_ENV` | `production` |
+From repo root:
 
-> **PORT note:** Railway injects `PORT` automatically. Update `main.ts` to use
-> `process.env.PORT ?? process.env.API_PORT ?? 4010` — see step below.
+```sh
+fly launch --no-deploy --copy-config --name gayatri-api --region sin
+```
 
-### Persistent volume for WA session
+- Says "found existing fly.toml" → answer **Yes** to use it.
+- Skip Postgres prompt (we use Supabase).
+- Skip Redis.
+- Don't deploy yet — we need to set secrets first.
 
-1. Railway → your API service → **Volumes** → Add Volume.
-2. Mount path: `/app/.wa-session-api`
-3. This preserves the Baileys session across redeploys.
+### Set secrets (env vars)
+
+```sh
+fly secrets set \
+  DATABASE_URL="postgresql://postgres.xxx:PASS@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres" \
+  ADMIN_SESSION_SECRET="$(openssl rand -hex 48)" \
+  JWT_SECRET="$(openssl rand -hex 48)" \
+  INTERNAL_SECRET="$(openssl rand -hex 32)" \
+  ADMIN_WA_NUMBER="62xxxxxxxxxx" \
+  CORS_ORIGINS="https://web.yourdomain.com,https://admin.yourdomain.com" \
+  APP_URL_WEB="https://web.yourdomain.com" \
+  APP_URL_ADMIN="https://admin.yourdomain.com"
+```
+
+(Non-secret vars `NODE_ENV`, `TZ`, `API_PORT`, `WA_PROVIDER`, `INTERNAL_CRON_ENABLED`
+live in `fly.toml [env]` — already set.)
+
+### Volume for WA session
+
+`fly.toml` declares the mount, but the volume itself must exist first:
+
+```sh
+fly volumes create wa_session --region sin --size 1
+```
+
+### Deploy
+
+```sh
+fly deploy
+```
+
+Build runs Docker from repo root using `apps/api/Dockerfile`. First build ~3–5 min.
 
 ### After deploy
 
-- Open `https://<railway-url>/v1/health` — should return `{"ok":true,...}`.
-- Open admin → `/wa/connect` → scan QR to pair WhatsApp.
+- `fly status` — should show 1 machine **passing** healthcheck
+- `fly logs` — live tail
+- `curl https://gayatri-api.fly.dev/v1/health` → `{"ok":true,...}`
+- App URL: `https://gayatri-api.fly.dev` — use as `NEXT_PUBLIC_API_URL` on Vercel
+- Open admin `/wa/connect` → scan QR
+
+### Update later
+
+Any `git push` + `fly deploy` redeploys. Volume + session survive.
 
 ---
 
@@ -116,3 +148,16 @@ DATABASE_URL="<supabase-url>" ./scripts/create-admin.sh \
 - [ ] Migrations + seed run on Supabase DB
 - [ ] First admin user created
 - [ ] WA paired from `/wa/connect`
+
+---
+
+## Railway alternative
+
+`railway.toml` + `apps/api/Dockerfile` also work on Railway:
+
+1. Empty Project → + Create → GitHub Repo → pick repo
+2. Settings → Variables → paste same env vars as Fly section above
+3. Settings → Volumes → mount `/app/.wa-session-api`
+4. Deploy
+
+Switch is purely platform — Dockerfile and entrypoint unchanged.

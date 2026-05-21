@@ -1,0 +1,17 @@
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+**/.tsbuildinfo
+.git
+.env
+.env.*
+.wa-session
+.wa-session-api
+.scratch
+.stitch
+.vscode
+.idea
+*.log
+README.md
+docs
