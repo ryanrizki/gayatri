@@ -18,11 +18,13 @@ export class AdminAuthController {
     @Res({ passthrough: true }) res: Response
   ) {
     const result = await this.auth.login(body.email, body.password)
+    const isProd = process.env.NODE_ENV === 'production'
     res.cookie('gayatri_admin', result.token, {
       httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 8 * 60 * 60 * 1000
+      sameSite: isProd ? 'none' : 'lax',
+      secure: isProd,
+      maxAge: 8 * 60 * 60 * 1000,
+      path: '/'
     })
     return result
   }

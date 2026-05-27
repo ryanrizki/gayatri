@@ -22,11 +22,20 @@ export function LoginForm() {
   })
 
   const mutation = useMutation({
-    mutationFn: (body: FormValues) =>
-      adminApi<{ token: string; user: { email: string; role: string } }>('/admin/auth/login', {
+    mutationFn: async (body: FormValues) => {
+      const result = await adminApi<{ token: string; user: { email: string; role: string } }>(
+        '/admin/auth/login',
+        { method: 'POST', body }
+      )
+      // The API's cookie is scoped to its own origin (cross-site). Mirror the token
+      // into a Next.js-domain cookie so the SSR layout in apps/admin can read it.
+      await fetch('/api/auth/session', {
         method: 'POST',
-        body
-      }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: result.token })
+      })
+      return result
+    },
     onSuccess: () => {
       toast({ variant: 'success', title: 'Berhasil masuk' })
       router.replace('/')
