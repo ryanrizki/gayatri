@@ -1,6 +1,7 @@
 FROM node:20-alpine AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
+RUN apk add --no-cache openssl libc6-compat
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 
 # ── deps: install all workspace dependencies ──────────────────────────────────
@@ -21,6 +22,8 @@ COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
 RUN pnpm --filter @gayatri/types build
 RUN pnpm --filter @gayatri/db generate
+RUN pnpm --filter @gayatri/db build
+RUN pnpm --filter @gayatri/wa build
 RUN pnpm --filter @gayatri/api build
 
 # ── runner: minimal production image ─────────────────────────────────────────
@@ -28,6 +31,7 @@ FROM node:20-alpine AS runner
 ENV NODE_ENV=production
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
+RUN apk add --no-cache openssl libc6-compat
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 WORKDIR /app
 
@@ -39,11 +43,13 @@ COPY --from=builder /app/apps/api/dist         ./apps/api/dist
 COPY --from=builder /app/apps/api/package.json ./apps/api/
 COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
 
-COPY --from=builder /app/packages/types/dist        ./packages/types/dist
+COPY --from=builder /app/packages/types/dist         ./packages/types/dist
 COPY --from=builder /app/packages/types/package.json ./packages/types/
-COPY --from=builder /app/packages/db                ./packages/db
-COPY --from=builder /app/packages/wa/dist           ./packages/wa/dist
-COPY --from=builder /app/packages/wa/package.json   ./packages/wa/
+COPY --from=builder /app/packages/types/node_modules ./packages/types/node_modules
+COPY --from=builder /app/packages/db                 ./packages/db
+COPY --from=builder /app/packages/wa/dist            ./packages/wa/dist
+COPY --from=builder /app/packages/wa/package.json    ./packages/wa/
+COPY --from=builder /app/packages/wa/node_modules    ./packages/wa/node_modules
 
 # WA session dir — mount a Railway Volume here to persist between deploys
 RUN mkdir -p /app/.wa-session-api
