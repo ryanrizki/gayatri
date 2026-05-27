@@ -1,0 +1,22 @@
+# Caddy reverse proxy — auto Let's Encrypt SSL
+# Replace api.gayatri.example.com with your real domain via $API_DOMAIN env
+
+{$API_DOMAIN} {
+	encode gzip zstd
+
+	# Security headers
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Prevent leaking Caddy version
+		-Server
+	}
+
+	reverse_proxy api:4010 {
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+}

@@ -1,163 +1,262 @@
 # Deployment Guide
 
-**Stack:** Supabase (Postgres) · Fly.io (API) · Vercel (Web + Admin)
+**Stack:**
+- **VPS** (Sumopod 2 vCPU / 2 GB) — API + Postgres + Caddy (auto SSL)
+- **Vercel** — web + admin (free tier)
+- **Cloudflare** — DNS (free)
 
-> Railway is an alternative — see "Railway alternative" at the bottom.
-
----
-
-## 1. Supabase — Database
-
-1. Go to [supabase.com](https://supabase.com) → New project.
-2. **Settings → Database → Connection string → URI** — copy it.
-   Looks like: `postgresql://postgres.xxxx:password@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres`
-3. Save as `DATABASE_URL` for Railway.
-4. After Railway deploy, run migrations once:
-   ```sh
-   DATABASE_URL="<your-supabase-url>" ./scripts/db-deploy.sh
-   DATABASE_URL="<your-supabase-url>" ./scripts/db-seed.sh
-   ```
+Total cost: Rp 60k/mo VPS + Rp 0 (Vercel + Cloudflare).
 
 ---
 
-## 2. Fly.io — API
+## Prerequisites
 
-### Install CLI + login
-
-```sh
-curl -L https://fly.io/install.sh | sh
-export FLYCTL_INSTALL="$HOME/.fly"
-export PATH="$FLYCTL_INSTALL/bin:$PATH"
-fly auth login        # opens browser
-```
-
-### Launch (first time only)
-
-From repo root:
-
-```sh
-fly launch --no-deploy --copy-config --name gayatri-api --region sin
-```
-
-- Says "found existing fly.toml" → answer **Yes** to use it.
-- Skip Postgres prompt (we use Supabase).
-- Skip Redis.
-- Don't deploy yet — we need to set secrets first.
-
-### Set secrets (env vars)
-
-```sh
-fly secrets set \
-  DATABASE_URL="postgresql://postgres.xxx:PASS@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres" \
-  ADMIN_SESSION_SECRET="$(openssl rand -hex 48)" \
-  JWT_SECRET="$(openssl rand -hex 48)" \
-  INTERNAL_SECRET="$(openssl rand -hex 32)" \
-  ADMIN_WA_NUMBER="62xxxxxxxxxx" \
-  CORS_ORIGINS="https://web.yourdomain.com,https://admin.yourdomain.com" \
-  APP_URL_WEB="https://web.yourdomain.com" \
-  APP_URL_ADMIN="https://admin.yourdomain.com"
-```
-
-(Non-secret vars `NODE_ENV`, `TZ`, `API_PORT`, `WA_PROVIDER`, `INTERNAL_CRON_ENABLED`
-live in `fly.toml [env]` — already set.)
-
-### Volume for WA session
-
-`fly.toml` declares the mount, but the volume itself must exist first:
-
-```sh
-fly volumes create wa_session --region sin --size 1
-```
-
-### Deploy
-
-```sh
-fly deploy
-```
-
-Build runs Docker from repo root using `apps/api/Dockerfile`. First build ~3–5 min.
-
-### After deploy
-
-- `fly status` — should show 1 machine **passing** healthcheck
-- `fly logs` — live tail
-- `curl https://gayatri-api.fly.dev/v1/health` → `{"ok":true,...}`
-- App URL: `https://gayatri-api.fly.dev` — use as `NEXT_PUBLIC_API_URL` on Vercel
-- Open admin `/wa/connect` → scan QR
-
-### Update later
-
-Any `git push` + `fly deploy` redeploys. Volume + session survive.
+- Domain you own (any registrar). Example below: `gayatri.example.com`.
+- VPS root SSH credentials from Sumopod.
+- Cloudflare account (free).
+- Vercel account (free, sign in with GitHub).
 
 ---
 
-## 3. Vercel — Web (customer FE)
+## 1. Cloudflare — DNS
 
-1. [vercel.com](https://vercel.com) → New Project → Import GitHub repo.
+1. Cloudflare → Add a site → enter `gayatri.example.com` (apex).
+2. Pick **Free plan**.
+3. Cloudflare gives you 2 nameservers (e.g. `xxx.ns.cloudflare.com`). Paste them into your domain registrar's DNS settings. Propagation: 5 min–24 h.
+4. Cloudflare → DNS → Add records:
+
+| Type | Name | Content | Proxy |
+|------|------|---------|-------|
+| A | `api` | `<VPS-IP>` | **DNS only** (grey cloud) |
+| CNAME | `@` | `cname.vercel-dns.com` | DNS only |
+| CNAME | `admin` | `cname.vercel-dns.com` | DNS only |
+
+> **Why "DNS only" for `api`?** Caddy needs port 80 reachable to fetch Let's Encrypt cert. Cloudflare proxy (orange cloud) breaks this on first issue. After cert issued, you can flip to proxied if you want CF caching.
+
+---
+
+## 2. VPS — initial setup
+
+SSH in:
+
+```sh
+ssh root@<VPS-IP>
+```
+
+### Harden SSH
+
+```sh
+# Create non-root user
+adduser deploy
+usermod -aG sudo deploy
+
+# Copy your SSH key (from your laptop, BEFORE locking down)
+# (run on laptop:) ssh-copy-id deploy@<VPS-IP>
+
+# Disable password login + root SSH
+sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+systemctl restart ssh
+
+# Firewall — only allow SSH, HTTP, HTTPS
+apt update && apt install -y ufw
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow 22/tcp
+ufw allow 80/tcp
+ufw allow 443/tcp
+ufw --force enable
+```
+
+### Install Docker
+
+```sh
+curl -fsSL https://get.docker.com | sh
+usermod -aG docker deploy
+# log out, log back in as deploy user
+```
+
+Verify: `docker --version` and `docker compose version`.
+
+---
+
+## 3. Deploy the API
+
+As `deploy` user:
+
+```sh
+# Clone repo
+cd ~
+git clone https://github.com/ryanrizki/gayatri.git
+cd gayatri
+
+# Create production env file
+cp deploy/.env.production.example deploy/.env.production
+nano deploy/.env.production
+```
+
+### Fill `deploy/.env.production`
+
+Generate secrets first:
+```sh
+openssl rand -hex 48        # ADMIN_SESSION_SECRET
+openssl rand -hex 48        # JWT_SECRET (different value)
+openssl rand -hex 32        # INTERNAL_SECRET
+```
+
+Edit values:
+
+```env
+POSTGRES_USER=gayatri
+POSTGRES_PASSWORD=<strong-random>
+POSTGRES_DB=gayatri
+
+API_DOMAIN=api.gayatri.example.com
+APP_URL_WEB=https://gayatri.example.com
+APP_URL_ADMIN=https://admin.gayatri.example.com
+CORS_ORIGINS=https://gayatri.example.com,https://admin.gayatri.example.com
+
+ADMIN_SESSION_SECRET=<hex>
+JWT_SECRET=<hex>
+INTERNAL_SECRET=<hex>
+
+ADMIN_WA_NUMBER=628xxxxxxxxxx
+```
+
+### Build + start
+
+```sh
+docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production up -d --build
+```
+
+First build: 3–6 min. Watch logs:
+
+```sh
+docker compose -f deploy/docker-compose.prod.yml logs -f api
+```
+
+Migrations run automatically via `docker-entrypoint.sh`.
+
+### Verify
+
+```sh
+curl https://api.gayatri.example.com/v1/health
+# {"ok":true,"service":"gayatri-api","ts":"..."}
+```
+
+If Caddy can't get cert: check that `api.gayatri.example.com` resolves to VPS IP (`dig api.gayatri.example.com`), and CF proxy is OFF (grey cloud).
+
+---
+
+## 4. Seed DB + create first admin
+
+```sh
+# Run seed (one-time)
+docker compose -f deploy/docker-compose.prod.yml exec api \
+  node_modules/.bin/tsx packages/db/prisma/seed.ts
+
+# OR create one admin user only
+docker compose -f deploy/docker-compose.prod.yml exec api \
+  node_modules/.bin/tsx packages/db/prisma/create-admin.ts \
+  --email owner@yourdomain.com --password '<strong>' --name 'Owner' --role OWNER
+```
+
+---
+
+## 5. Vercel — web
+
+1. [vercel.com](https://vercel.com) → Add New Project → Import `gayatri` repo.
 2. **Root Directory:** `apps/web`
-3. Vercel reads `apps/web/vercel.json` for build commands automatically.
-
-### Environment variables
+3. Framework: Next.js (auto-detected via `apps/web/vercel.json`).
+4. **Environment Variables:**
 
 | Key | Value |
 |-----|-------|
-| `NEXT_PUBLIC_API_URL` | `https://<railway-url>` |
+| `NEXT_PUBLIC_API_URL` | `https://api.gayatri.example.com` |
 | `TZ` | `Asia/Jakarta` |
-| `NODE_ENV` | `production` |
+
+5. Deploy. After it builds:
+   - Vercel → Project → Settings → Domains → add `gayatri.example.com`.
 
 ---
 
-## 4. Vercel — Admin FE
+## 6. Vercel — admin
+
+Same as web, different root:
 
 1. New Project → same repo → **Root Directory:** `apps/admin`
-2. Vercel reads `apps/admin/vercel.json`.
-
-### Environment variables
+2. **Environment Variables:**
 
 | Key | Value |
 |-----|-------|
-| `NEXT_PUBLIC_API_URL` | `https://<railway-url>` |
-| `ADMIN_SESSION_SECRET` | same as Railway |
-| `JWT_SECRET` | same as Railway |
+| `NEXT_PUBLIC_API_URL` | `https://api.gayatri.example.com` |
+| `ADMIN_SESSION_SECRET` | same value as on VPS |
+| `JWT_SECRET` | same value as on VPS |
 | `TZ` | `Asia/Jakarta` |
-| `NODE_ENV` | `production` |
+
+3. Domains → add `admin.gayatri.example.com`.
 
 ---
 
-## 5. Create first admin user (production)
+## 7. Pair WhatsApp
 
+1. Open `https://admin.gayatri.example.com`.
+2. Log in with the owner you created.
+3. Sidebar → **WhatsApp → Pairing** (`/wa/connect`).
+4. Click **Hubungkan WhatsApp** → scan QR with WhatsApp → Linked Devices.
+5. Status flips to **Terhubung** within ~5 s.
+
+Session is stored in the `wa_session` Docker volume — survives container restarts and redeploys.
+
+---
+
+## 8. Updating later
+
+On VPS:
 ```sh
-DATABASE_URL="<supabase-url>" ./scripts/create-admin.sh \
-  --email owner@yourdomain.com \
-  --password <strong-password> \
-  --name "Owner" \
-  --role OWNER
+cd ~/gayatri
+git pull
+docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production up -d --build
 ```
 
+Migrations run automatically. WA session and Postgres data are in named volumes — preserved.
+
+Vercel auto-deploys on every push to `main`.
+
 ---
 
-## Quick checklist
+## Backups
 
-- [ ] Supabase project created, `DATABASE_URL` copied
-- [ ] `ADMIN_SESSION_SECRET` + `JWT_SECRET` generated (two different secrets)
-- [ ] Railway service deployed, health endpoint returns `ok`
-- [ ] Volume mounted at `/app/.wa-session-api`
-- [ ] `CORS_ORIGINS` includes both Vercel URLs
-- [ ] Web app deployed on Vercel, `NEXT_PUBLIC_API_URL` set
-- [ ] Admin app deployed on Vercel, session secrets set
-- [ ] Migrations + seed run on Supabase DB
-- [ ] First admin user created
+### Postgres dump (run weekly via cron)
+
+```sh
+docker compose -f deploy/docker-compose.prod.yml exec -T postgres \
+  pg_dump -U gayatri gayatri | gzip > ~/backups/gayatri-$(date +%F).sql.gz
+```
+
+### WA session
+
+```sh
+docker run --rm -v gayatri_wa_session:/data -v ~/backups:/backup alpine \
+  tar czf /backup/wa-session-$(date +%F).tar.gz -C /data .
+```
+
+Copy backups off-box (rsync to your laptop, or push to R2 / S3).
+
+---
+
+## Checklist
+
+- [ ] Domain registered, nameservers pointing to Cloudflare
+- [ ] CF DNS: `api` A record to VPS IP, `@` + `admin` CNAME to Vercel
+- [ ] VPS SSH hardened (no root, no password)
+- [ ] UFW firewall: 22, 80, 443 only
+- [ ] Docker + compose installed
+- [ ] Repo cloned, `deploy/.env.production` filled with real secrets
+- [ ] `docker compose up -d --build` runs clean
+- [ ] `curl https://api.<domain>/v1/health` returns `ok`
+- [ ] DB seeded, first admin created
+- [ ] Vercel web project deployed, custom domain attached
+- [ ] Vercel admin project deployed, custom domain attached
 - [ ] WA paired from `/wa/connect`
-
----
-
-## Railway alternative
-
-`railway.toml` + `apps/api/Dockerfile` also work on Railway:
-
-1. Empty Project → + Create → GitHub Repo → pick repo
-2. Settings → Variables → paste same env vars as Fly section above
-3. Settings → Volumes → mount `/app/.wa-session-api`
-4. Deploy
-
-Switch is purely platform — Dockerfile and entrypoint unchanged.
+- [ ] Backup cron set

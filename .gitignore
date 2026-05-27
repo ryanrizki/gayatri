@@ -12,6 +12,7 @@ out
 .env
 .env.local
 .env.*.local
+deploy/.env.production
 
 # MCP config (contains API keys)
 .mcp.json

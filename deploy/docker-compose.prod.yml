@@ -1,0 +1,78 @@
+# Production stack for Sumopod VPS
+# Postgres + API + Caddy (auto Let's Encrypt SSL)
+#
+# Usage on VPS:
+#   cd ~/gayatri
+#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production up -d
+#   docker compose -f deploy/docker-compose.prod.yml logs -f api
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      TZ: Asia/Jakarta
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Postgres only reachable from inside the docker network — no public port
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      TZ: Asia/Jakarta
+      API_PORT: 4010
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public"
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      APP_URL_WEB: ${APP_URL_WEB}
+      APP_URL_ADMIN: ${APP_URL_ADMIN}
+      WA_PROVIDER: internal
+      ADMIN_WA_NUMBER: ${ADMIN_WA_NUMBER}
+      INTERNAL_CRON_ENABLED: "true"
+    volumes:
+      - wa_session:/app/.wa-session-api
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4010/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    # No host port — Caddy proxies internally on the docker network
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      API_DOMAIN: ${API_DOMAIN}
+
+volumes:
+  pgdata:
+  wa_session:
+  caddy_data:
+  caddy_config:
