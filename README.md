@@ -26,9 +26,9 @@ Baby spa booking + commerce platform with WhatsApp-native notifications.
 
 ## Stack
 
-Next.js · NestJS · Prisma · PostgreSQL · Midtrans · OpenWA/Fonnte (WaLog queue drained by POST /v1/internal/tick via external cron)
+Next.js · NestJS · Prisma · PostgreSQL · Midtrans · In-process Baileys WA gateway (WaLog queue drained every 30 s by self-cron via `@nestjs/schedule`)
 
-> **Notifications:** WhatsApp is delivered via a durable `WaLog` queue. `WaService.enqueue()` writes a `QUEUED` row; an external cron (cron-job.org) calls `POST /v1/internal/tick` (guarded by `INTERNAL_SECRET`), which runs `scanReminders()` then `drainWaJobs()` — claims rows via Postgres `FOR UPDATE SKIP LOCKED` and sends via the gateway selected by `WA_PROVIDER` (code-default `fonnte`; `.env.example` ships `openwa`). No Redis, no worker process.
+> **Notifications:** WhatsApp is delivered via a durable `WaLog` queue. `WaService.enqueue()` writes a `QUEUED` row; `InternalCron` (`@nestjs/schedule`, every 30 s) calls `InternalService.drainWaJobs()` + `scanReminders()` — claims rows via Postgres `FOR UPDATE SKIP LOCKED` and sends via the gateway selected by `WA_PROVIDER` (production: `internal` = in-process Baileys, paired from the admin UI). No Redis, no worker process. Set `INTERNAL_CRON_ENABLED=false` and hit `POST /v1/internal/tick` (guarded by `INTERNAL_SECRET`) from an external scheduler if you'd rather not run the in-process loop.
 
 ## Quick start
 
@@ -88,6 +88,14 @@ All scripts live in [scripts/](./scripts/) (see [scripts/README.md](./scripts/RE
 | Script | What it does |
 |---|---|
 | `./scripts/secret.sh` | Print 96-char hex (openssl or node fallback) — use for `JWT_SECRET` / `ADMIN_SESSION_SECRET` |
+
+## Deploy
+
+See [docs/DEPLOY.md](./docs/DEPLOY.md). Two supported paths:
+- **sslip.io quick deploy** — VPS public IP only, no domain registration. Caddy still issues a real Let's Encrypt cert (e.g. `https://43-157-205-51.sslip.io`).
+- **Custom domain** — Cloudflare DNS → Caddy on VPS for the API, Vercel for `apps/web` + `apps/admin`.
+
+Either way the API stack (Postgres + NestJS + Caddy) runs via `deploy/docker-compose.prod.yml`. Cross-origin auth between Vercel-hosted admin and the API is wired (`SameSite=None; Secure` API cookie + a Next.js Route Handler in admin that mirrors the JWT into a same-origin cookie for SSR).
 
 ## Status
 
