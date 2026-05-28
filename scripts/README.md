@@ -14,7 +14,8 @@ Convenience wrappers. All are idempotent and source `.env` from repo root.
 | `db-migrate.sh [name]` | `prisma migrate dev` — pass migration name when creating new |
 | `db-deploy.sh` | `prisma migrate deploy` — for production / CI |
 | `db-seed.sh` | Run seed script (admin user + sample catalog) |
-| `create-admin.sh` | Create or reset an `AdminUser` (default role `OWNER`). Args `--email --password --name --role`, or interactive prompts. |
+| `create-admin.sh` | Create or reset an `AdminUser` against the **local dev** DB. Args `--email --password --name --role`, or interactive prompts. |
+| `prod-create-admin.sh` | Same, but runs inside the **VPS production** API container (`docker compose exec api …`). Use this to replace the seeded password after deploy. |
 | `db-studio.sh` | Open Prisma Studio in browser |
 | `db-reset.sh` | DESTRUCTIVE — drop + recreate + reseed (prompts for confirmation) |
 | `clean.sh` | Remove `.next`, `dist`, `.turbo`, `*.tsbuildinfo` |
